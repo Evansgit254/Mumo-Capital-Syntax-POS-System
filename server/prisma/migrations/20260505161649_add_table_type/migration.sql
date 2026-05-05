@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "Table" ADD COLUMN     "type" TEXT NOT NULL DEFAULT 'TABLE';

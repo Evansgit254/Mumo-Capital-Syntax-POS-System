@@ -1,0 +1,188 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id              String           @id @default(uuid())
+  name            String
+  domain          String?          @unique
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  customers       Customer[]
+  inventoryItems  InventoryItem[]
+  menuItems       MenuItem[]
+  orders          Order[]
+  payments        Payment[]
+  reservations    Reservation[]
+  rolePermissions RolePermission[]
+  tables          Table[]
+  settings        TenantSettings?
+  users           User[]
+}
+
+model User {
+  id        String   @id @default(uuid())
+  tenantId  String
+  email     String   @unique
+  password  String
+  firstName String
+  lastName  String
+  role      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  status    String   @default("ACTIVE")
+  orders    Order[]
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, email])
+}
+
+model MenuItem {
+  id          String      @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  price       Float
+  categoryId  String?
+  isAvailable Boolean     @default(true)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  tenant      Tenant      @relation(fields: [tenantId], references: [id])
+  orderItems  OrderItem[]
+}
+
+model Order {
+  id          String      @id @default(uuid())
+  tenantId    String
+  tableId     String?
+  userId      String?
+  status      String
+  totalAmount Float
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  table       Table?      @relation(fields: [tableId], references: [id])
+  tenant      Tenant      @relation(fields: [tenantId], references: [id])
+  user        User?       @relation(fields: [userId], references: [id])
+  items       OrderItem[]
+  payments    Payment[]
+}
+
+model OrderItem {
+  id         String   @id @default(uuid())
+  orderId    String
+  menuItemId String
+  quantity   Int
+  unitPrice  Float
+  subtotal   Float
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+  order      Order    @relation(fields: [orderId], references: [id])
+}
+
+model Table {
+  id           String        @id @default(uuid())
+  tenantId     String
+  number       String
+  capacity     Int
+  isOccupied   Boolean       @default(false)
+  type         String        @default("TABLE")
+  orders       Order[]
+  reservations Reservation[]
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, number])
+}
+
+model Payment {
+  id        String   @id @default(uuid())
+  tenantId  String
+  orderId   String
+  amount    Float
+  status    String
+  method    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  order     Order    @relation(fields: [orderId], references: [id])
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+model Reservation {
+  id         String    @id @default(uuid())
+  tenantId   String
+  tableId    String?
+  guestName  String
+  guestPhone String?
+  guestEmail String?
+  guestCount Int
+  startTime  DateTime
+  endTime    DateTime?
+  status     String    @default("PENDING")
+  notes      String?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  table      Table?    @relation(fields: [tableId], references: [id])
+  tenant     Tenant    @relation(fields: [tenantId], references: [id])
+}
+
+model Customer {
+  id            String   @id @default(uuid())
+  tenantId      String
+  name          String
+  email         String?
+  phone         String?
+  totalSpend    Float    @default(0)
+  visitCount    Int      @default(0)
+  loyaltyPoints Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, email])
+}
+
+model InventoryItem {
+  id           String   @id @default(uuid())
+  tenantId     String
+  name         String
+  sku          String?
+  unit         String
+  currentStock Float    @default(0)
+  minStock     Float    @default(0)
+  costPerUnit  Float    @default(0)
+  supplierId   String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, sku])
+}
+
+model TenantSettings {
+  id           String   @id @default(uuid())
+  tenantId     String   @unique
+  currency     String   @default("KES")
+  taxRate      Float    @default(16.0)
+  logoUrl      String?
+  timezone     String   @default("Africa/Nairobi")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  displayName  String?
+  primaryColor String?  @default("#008B8B")
+  tenant       Tenant   @relation(fields: [tenantId], references: [id])
+}
+
+model RolePermission {
+  id          String   @id @default(uuid())
+  tenantId    String
+  role        String
+  permissions String[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tenant      Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, role])
+}
