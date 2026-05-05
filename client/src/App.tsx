@@ -18,6 +18,8 @@ import ReportsPage from './pages/ReportsPage';
 import PermissionsPage from './pages/admin/PermissionsPage';
 import TenantPage from './pages/admin/TenantPage';
 import SettingsPage from './pages/SettingsPage';
+import InventoryPage from './pages/InventoryPage';
+import LoyaltyPage from './pages/LoyaltyPage';
 import { Role } from '@mumo/types';
 
 function App() {
@@ -54,6 +56,12 @@ function App() {
                         <Route path="/menu" element={<MenuManagerPage />} />
                         <Route path="/checkout" element={<CheckoutPage />} />
                         <Route path="/reports" element={<ReportsPage />} />
+
+                        {/* Inventory (Manager/Admin) */}
+                        <Route element={<ProtectedRoute allowedRoles={[Role.TENANT_ADMIN, Role.MANAGER]} />}>
+                            <Route path="/inventory" element={<InventoryPage />} />
+                            <Route path="/loyalty" element={<LoyaltyPage />} />
+                        </Route>
 
                         {/* Settings (All authenticated roles) */}
                         <Route path="/settings" element={<SettingsPage />} />

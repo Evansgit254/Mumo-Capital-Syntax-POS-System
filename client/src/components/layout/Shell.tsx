@@ -16,7 +16,9 @@ import {
     Calendar,
     Shield,
     Building2,
-    Settings
+    Settings,
+    Package,
+    Heart
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -31,6 +33,8 @@ const NAV_ITEMS = [
     { name: 'POS', path: '/pos', icon: ShoppingCart },
     { name: 'KDS', path: '/kds', icon: ChefHat },
     { name: 'Reservations', path: '/reservations', icon: Calendar },
+    { name: 'Inventory', path: '/inventory', icon: Package, roles: ['TENANT_ADMIN', 'MANAGER'] },
+    { name: 'Loyalty', path: '/loyalty', icon: Heart, roles: ['TENANT_ADMIN', 'MANAGER'] },
     { name: 'Menu', path: '/menu', icon: UtensilsCrossed, roles: ['TENANT_ADMIN', 'MANAGER'] },
     { name: 'Reports', path: '/reports', icon: BarChart3 },
     { name: 'Settings', path: '/settings', icon: Settings },

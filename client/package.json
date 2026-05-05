@@ -16,13 +16,16 @@
         "lucide-react": "^1.14.0",
         "react": "^18.2.0",
         "react-dom": "^18.2.0",
+        "react-hot-toast": "^2.6.0",
         "react-router-dom": "^6.22.0",
+        "recharts": "^3.8.1",
         "tailwind-merge": "^3.5.0",
         "zustand": "^5.0.13"
     },
     "devDependencies": {
         "@types/react": "^18.2.55",
         "@types/react-dom": "^18.2.19",
+        "@types/recharts": "^1.8.29",
         "@vitejs/plugin-react": "^4.2.1",
         "autoprefixer": "^10.4.17",
         "postcss": "^8.4.35",

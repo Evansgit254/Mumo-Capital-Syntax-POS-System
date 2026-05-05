@@ -1,382 +1,284 @@
+import React, { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { orderService, paymentService } from '../api/service';
 import { 
+    Calendar, 
+    Download, 
     TrendingUp, 
-    ShoppingBag, 
-    Calendar,
-    ArrowUpRight,
+    TrendingDown, 
+    DollarSign, 
+    Users, 
+    Package, 
+    ArrowUpRight, 
     ArrowDownRight,
-    Download,
-    PieChart,
-    Search,
-    ChevronUp,
     ChevronDown,
     Filter,
-    Clock,
-    User as UserIcon,
-    ShoppingCart
+    BarChart3,
+    PieChart,
+    Activity
 } from 'lucide-react';
+import { 
+    BarChart, 
+    Bar, 
+    XAxis, 
+    YAxis, 
+    CartesianGrid, 
+    Tooltip, 
+    ResponsiveContainer, 
+    AreaChart, 
+    Area,
+    Cell,
+    PieChart as RePieChart,
+    Pie
+} from 'recharts';
+import { orderService, paymentService, getErrorMessage } from '../api/service';
 import Skeleton from '../components/ui/Skeleton';
-import EmptyState from '../components/ui/EmptyState';
-import { useState, useMemo } from 'react';
-import { cn } from '../lib/utils';
-import { Order, OrderStatus } from '@mumo/types';
 
-type SortConfig = { key: keyof Order | 'staff' | 'tableNum'; direction: 'asc' | 'desc' } | null;
+// Mock data for trends (In production, this would come from a dedicated analytics endpoint)
+const trendData = [
+    { name: 'Mon', revenue: 42000, orders: 45 },
+    { name: 'Tue', revenue: 38000, orders: 40 },
+    { name: 'Wed', revenue: 55000, orders: 62 },
+    { name: 'Thu', revenue: 48000, orders: 55 },
+    { name: 'Fri', revenue: 72000, orders: 88 },
+    { name: 'Sat', revenue: 85000, orders: 95 },
+    { name: 'Sun', revenue: 65000, orders: 70 },
+];
 
-export default function ReportsPage() {
-    const [range, setRange] = useState<'today' | 'week' | 'month'>('today');
-    const [searchQuery, setSearchQuery] = useState('');
-    const [sortConfig, setSortConfig] = useState<SortConfig>(null);
-    const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 8;
+const categoryData = [
+    { name: 'Food', value: 45, color: '#008B8B' },
+    { name: 'Beverages', value: 30, color: '#FFBF00' },
+    { name: 'Rooms', value: 15, color: '#6366F1' },
+    { name: 'Services', value: 10, color: '#EC4899' },
+];
 
-    const ordersQuery = useQuery({
-        queryKey: ['orders'],
-        queryFn: orderService.getAll,
-    });
+const ReportsPage: React.FC = () => {
+    const [timeframe, setTimeframe] = useState('7d');
 
-    const paymentsQuery = useQuery({
+    const { data: payments, isLoading: paymentsLoading } = useQuery({
         queryKey: ['payments'],
         queryFn: paymentService.getAll,
     });
 
-    const isLoading = ordersQuery.isLoading || paymentsQuery.isLoading;
+    const { data: orders, isLoading: ordersLoading } = useQuery({
+        queryKey: ['orders'],
+        queryFn: orderService.getAll,
+    });
 
-    // Filter by Date Range
-    const rangeFilteredData = useMemo(() => {
-        const items = ordersQuery.data || [];
-        const now = new Date();
-        return items.filter(item => {
-            const date = new Date(item.createdAt);
-            if (range === 'today') return date.toDateString() === now.toDateString();
-            if (range === 'week') {
-                const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-                return date >= oneWeekAgo;
-            }
-            if (range === 'month') return date.getMonth() === now.getMonth() && date.getFullYear() === now.getFullYear();
-            return true;
-        });
-    }, [ordersQuery.data, range]);
-
-    // Derived Financial Stats from range filtered data
     const stats = useMemo(() => {
-        const totalRevenue = rangeFilteredData.reduce((sum, o) => sum + o.totalAmount, 0);
-        const orderCount = rangeFilteredData.length;
-        const avgOrderValue = orderCount > 0 ? totalRevenue / orderCount : 0;
-        return { totalRevenue, orderCount, avgOrderValue };
-    }, [rangeFilteredData]);
+        if (!payments || !orders) return { revenue: 0, orders: 0, avgCheck: 0 };
+        const revenue = payments.reduce((sum, p) => sum + p.amount, 0);
+        return {
+            revenue,
+            orders: orders.length,
+            avgCheck: orders.length > 0 ? revenue / orders.length : 0,
+        };
+    }, [payments, orders]);
 
-    // Ledger Data Processing (Search + Filter + Sort)
-    const ledgerData = useMemo(() => {
-        let data = [...rangeFilteredData];
-
-        // Search locally
-        if (searchQuery) {
-            const query = searchQuery.toLowerCase();
-            data = data.filter(o => 
-                o.id.toLowerCase().includes(query) || 
-                (o as any).user?.firstName?.toLowerCase().includes(query) ||
-                (o as any).user?.lastName?.toLowerCase().includes(query)
-            );
-        }
-
-        // Sort locally
-        if (sortConfig) {
-            data.sort((a, b) => {
-                let valA: any = a[sortConfig.key as keyof Order];
-                let valB: any = b[sortConfig.key as keyof Order];
-
-                if (sortConfig.key === 'staff') {
-                    valA = `${(a as any).user?.firstName} ${(a as any).user?.lastName}`;
-                    valB = `${(b as any).user?.firstName} ${(b as any).user?.lastName}`;
-                } else if (sortConfig.key === 'tableNum') {
-                    valA = (a as any).table?.number || '';
-                    valB = (b as any).table?.number || '';
-                }
-
-                if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
-                if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
-                return 0;
-            });
-        }
-
-        return data;
-    }, [rangeFilteredData, searchQuery, sortConfig]);
-
-    // Pagination
-    const paginatedLedger = useMemo(() => {
-        const start = (currentPage - 1) * itemsPerPage;
-        return ledgerData.slice(start, start + itemsPerPage);
-    }, [ledgerData, currentPage]);
-
-    const totalPages = Math.ceil(ledgerData.length / itemsPerPage);
-
-    const handleSort = (key: any) => {
-        let direction: 'asc' | 'desc' = 'asc';
-        if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
-            direction = 'desc';
-        }
-        setSortConfig({ key, direction });
-    };
-
-    const downloadCSV = () => {
-        if (ledgerData.length === 0) return;
-        
-        const headers = ['Order ID', 'Date', 'Table', 'Staff', 'Items', 'Amount', 'Payment Method', 'Status'];
-        const rows = ledgerData.map(o => [
-            o.id.slice(-8).toUpperCase(),
-            new Date(o.createdAt).toLocaleString(),
-            (o as any).table?.number || 'Takeaway',
-            `${(o as any).user?.firstName} ${(o as any).user?.lastName}`,
-            (o as any).items?.length || 0,
-            o.totalAmount,
-            (o as any).payments?.[0]?.method || 'N/A',
-            o.status
-        ]);
-
-        const csvContent = "data:text/csv;charset=utf-8," 
-            + headers.join(",") + "\n" 
-            + rows.map(e => e.join(",")).join("\n");
-
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `mumo_pos_ledger_${range}_${new Date().toISOString().split('T')[0]}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    };
+    if (paymentsLoading || ordersLoading) {
+        return <div className="p-10 space-y-10"><Skeleton className="h-20 w-64" /><Skeleton className="h-[600px] w-full rounded-3xl" /></div>;
+    }
 
     return (
-        <div className="p-8 tablet:p-10 space-y-10 min-h-full">
+        <div className="p-6 tablet:p-10 space-y-10">
             {/* Header */}
-            <div className="flex flex-col tablet:flex-row tablet:items-center justify-between gap-6">
-                <div>
-                    <h1 className="display-lg text-on-surface">Reports & Analytics</h1>
-                    <p className="body-lg text-on-surface-variant">Performance metrics and financial breakdown for <span className="text-secondary font-bold">{range}</span>.</p>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="space-y-1">
+                    <h1 className="display-lg text-on-surface text-premium-gradient">Executive Analytics</h1>
+                    <p className="body-lg text-on-surface-variant">Real-time performance metrics and business insights.</p>
                 </div>
-
-                <div className="flex items-center gap-4">
-                    <div className="flex bg-surface-container rounded-xl p-1 border border-outline-variant">
-                        {(['today', 'week', 'month'] as const).map(r => (
-                            <button 
-                                key={r}
-                                onClick={() => { setRange(r); setCurrentPage(1); }}
-                                className={cn(
-                                    "px-6 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all",
-                                    range === r ? "bg-secondary text-white shadow-lg" : "text-on-surface-variant hover:text-on-surface"
-                                )}
-                            >
-                                {r}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-            </div>
-
-            {/* Top Stats */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-                {isLoading ? (
-                    Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-32 w-full rounded-2xl" />)
-                ) : (
-                    <>
-                        <ReportStatCard 
-                            title="Total Revenue" 
-                            value={`${stats.totalRevenue.toLocaleString()} KES`} 
-                            icon={TrendingUp} 
-                            trend={{ val: "+8.4%", positive: true }} 
-                        />
-                        <ReportStatCard 
-                            title="Total Orders" 
-                            value={stats.orderCount.toString()} 
-                            icon={ShoppingBag} 
-                            trend={{ val: "+2.1%", positive: true }} 
-                        />
-                        <ReportStatCard 
-                            title="Avg. Ticket" 
-                            value={`${Math.round(stats.avgOrderValue).toLocaleString()} KES`} 
-                            icon={PieChart} 
-                            trend={{ val: "-1.2%", positive: false }} 
-                        />
-                    </>
-                )}
-            </div>
-
-            {/* Ledger Section */}
-            <div className="space-y-6">
-                <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
-                    <h2 className="headline-md">Transaction Ledger</h2>
-                    <div className="flex items-center gap-3 w-full md:w-auto">
-                        <div className="relative flex-1 md:w-64">
-                            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant" />
-                            <input 
-                                type="text"
-                                placeholder="Search by ID or staff..."
-                                value={searchQuery}
-                                onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-                                className="input-field !pl-11"
-                            />
-                        </div>
-                        <button 
-                            onClick={downloadCSV}
-                            disabled={ledgerData.length === 0}
-                            className="h-10 px-4 btn-primary !rounded-xl !bg-surface-container-highest !text-on-surface hover:!bg-white/10 border border-outline-variant disabled:opacity-50"
-                        >
-                            <Download size={18} />
-                            <span className="hidden md:inline">Export CSV</span>
+                <div className="flex items-center gap-3">
+                    <div className="dropdown relative group">
+                         <button className="btn-secondary flex items-center gap-2 bg-surface-container-low border-outline-variant">
+                            <Calendar size={18} />
+                            Last 7 Days
+                            <ChevronDown size={16} />
                         </button>
                     </div>
+                    <button className="btn-primary flex items-center gap-2 shadow-lg shadow-primary/20">
+                        <Download size={18} />
+                        Export
+                    </button>
+                </div>
+            </div>
+
+            {/* Quick Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                {[
+                    { label: 'Total Revenue', value: `KES ${stats.revenue.toLocaleString()}`, trend: '+12.5%', icon: DollarSign, color: 'text-primary', bg: 'bg-primary/10' },
+                    { label: 'Total Orders', value: stats.orders, trend: '+8.2%', icon: BarChart3, color: 'text-secondary', bg: 'bg-secondary/10' },
+                    { label: 'Avg. Check', value: `KES ${Math.round(stats.avgCheck).toLocaleString()}`, trend: '-2.1%', icon: Activity, color: 'text-tertiary', bg: 'bg-tertiary/10' },
+                    { label: 'Guest Growth', value: '+142', trend: '+18%', icon: Users, color: 'text-primary', bg: 'bg-primary/10' },
+                ].map((stat, i) => (
+                    <div key={i} className="card-default p-6 space-y-4 hover:border-primary/30 transition-all duration-300">
+                        <div className="flex justify-between items-start">
+                            <div className={`p-3 rounded-2xl ${stat.bg} ${stat.color}`}>
+                                <stat.icon size={24} />
+                            </div>
+                            <div className={`flex items-center gap-1 text-xs font-bold ${stat.trend.startsWith('+') ? 'text-primary' : 'text-tertiary'}`}>
+                                {stat.trend.startsWith('+') ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
+                                {stat.trend}
+                            </div>
+                        </div>
+                        <div className="space-y-1">
+                            <p className="label-sm text-on-hint font-bold uppercase tracking-widest">{stat.label}</p>
+                            <div className="display-sm">{stat.value}</div>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Charts Row */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
+                {/* Revenue Trend */}
+                <div className="lg:col-span-2 card-default overflow-hidden flex flex-col h-[500px]">
+                    <div className="p-8 border-b border-outline-variant flex justify-between items-center">
+                        <h3 className="headline-sm font-bold flex items-center gap-3">
+                            Revenue Trends
+                            <span className="label-sm bg-primary/10 text-primary px-3 py-1 rounded-full">LIVE</span>
+                        </h3>
+                        <div className="flex gap-2">
+                             {['Week', 'Month', 'Year'].map(t => (
+                                 <button key={t} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${t === 'Week' ? 'bg-primary text-on-primary' : 'hover:bg-surface-container-high text-on-surface-variant'}`}>{t}</button>
+                             ))}
+                        </div>
+                    </div>
+                    <div className="flex-1 p-8">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={trendData}>
+                                <defs>
+                                    <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
+                                        <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.3}/>
+                                        <stop offset="95%" stopColor="var(--primary)" stopOpacity={0}/>
+                                    </linearGradient>
+                                </defs>
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--outline-variant)" opacity={0.5} />
+                                <XAxis 
+                                    dataKey="name" 
+                                    axisLine={false} 
+                                    tickLine={false} 
+                                    tick={{ fill: 'var(--on-hint)', fontSize: 12, fontWeight: 600 }}
+                                    dy={10}
+                                />
+                                <YAxis 
+                                    axisLine={false} 
+                                    tickLine={false} 
+                                    tick={{ fill: 'var(--on-hint)', fontSize: 12, fontWeight: 600 }}
+                                    tickFormatter={(val) => `K${val/1000}k`}
+                                />
+                                <Tooltip 
+                                    contentStyle={{ 
+                                        backgroundColor: 'var(--surface-container-high)', 
+                                        border: '1px solid var(--outline-variant)',
+                                        borderRadius: '16px',
+                                        boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
+                                    }}
+                                    itemStyle={{ color: 'var(--on-surface)', fontWeight: 700 }}
+                                />
+                                <Area 
+                                    type="monotone" 
+                                    dataKey="revenue" 
+                                    stroke="var(--primary)" 
+                                    strokeWidth={4}
+                                    fillOpacity={1} 
+                                    fill="url(#colorRev)" 
+                                    animationDuration={2000}
+                                />
+                            </AreaChart>
+                        </ResponsiveContainer>
+                    </div>
                 </div>
 
-                <div className="card-default p-0 overflow-hidden border border-outline-variant/30">
-                    <div className="overflow-x-auto">
-                        <table className="w-full text-left">
-                            <thead>
-                                <tr className="bg-surface-container border-b border-outline-variant">
-                                    <SortHeader label="Order ID" sortKey="id" currentSort={sortConfig} onSort={handleSort} />
-                                    <SortHeader label="Table" sortKey="tableNum" currentSort={sortConfig} onSort={handleSort} />
-                                    <SortHeader label="Waitron" sortKey="staff" currentSort={sortConfig} onSort={handleSort} />
-                                    <SortHeader label="Total" sortKey="totalAmount" currentSort={sortConfig} onSort={handleSort} textAlign="right" />
-                                    <th className="px-6 py-4 label-sm text-on-surface-variant">Method</th>
-                                    <SortHeader label="Time" sortKey="createdAt" currentSort={sortConfig} onSort={handleSort} />
-                                    <th className="px-6 py-4 label-sm text-on-surface-variant text-center">Status</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-outline-variant/20">
-                                {isLoading ? (
-                                    Array(5).fill(0).map((_, i) => <tr key={i}><td colSpan={7}><Skeleton className="h-16 w-full" /></td></tr>)
-                                ) : paginatedLedger.length === 0 ? (
-                                    <tr>
-                                        <td colSpan={7}>
-                                            <EmptyState 
-                                                icon={<ShoppingCart size={32} />}
-                                                title={searchQuery ? "No matching orders" : "No transactions found"}
-                                                description={searchQuery ? `We couldn't find any orders matching "${searchQuery}"` : `There are no transactions recorded for ${range}.`}
-                                                className="py-16"
-                                            />
-                                        </td>
-                                    </tr>
-                                ) : (
-                                    paginatedLedger.map((order: Order) => (
-                                        <tr key={order.id} className="hover:bg-white/[0.02] transition-colors group">
-                                            <td className="px-6 py-4 font-mono text-xs font-black text-secondary tracking-widest">
-                                                #{order.id.slice(-8).toUpperCase()}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="flex items-center gap-2">
-                                                    <div className="h-2 w-2 rounded-full bg-secondary/40" />
-                                                    <span className="body-sm font-bold text-on-surface">{(order as any).table?.number || 'T-AWAY'}</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 body-sm text-on-surface/80">
-                                                {(order as any).user ? `${(order as any).user.firstName} ${(order as any).user.lastName}` : 'Guest'}
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <span className="body-md font-black text-on-surface">{order.totalAmount.toLocaleString()}</span>
-                                                <span className="text-[10px] ml-1 opacity-40 font-bold">KES</span>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="flex items-center gap-2 text-on-surface-variant">
-                                                    <span className="text-[10px] font-bold uppercase border border-outline-variant px-1.5 rounded">
-                                                        {(order as any).payments?.[0]?.method || 'CASH'}
-                                                    </span>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 text-on-surface-variant whitespace-nowrap">
-                                                <div className="flex flex-col">
-                                                    <span className="text-xs font-bold text-on-surface">{new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                                    <span className="text-[10px] opacity-60 uppercase">{new Date(order.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}</span>
-                                                </div>
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <span className={cn(
-                                                    "pill-status",
-                                                    order.status === OrderStatus.SERVED && "bg-secondary/10 text-secondary border border-secondary/20",
-                                                    order.status === OrderStatus.READY && "bg-secondary/10 text-secondary border border-secondary/20",
-                                                    order.status === OrderStatus.CANCELLED && "bg-red-500/10 text-red-500 border border-red-500/20",
-                                                    "text-[10px]"
-                                                )}>
-                                                    {order.status}
-                                                </span>
-                                            </td>
-                                        </tr>
-                                    ))
-                                )}
-                            </tbody>
-                        </table>
+                {/* Category Breakdown */}
+                <div className="card-default overflow-hidden flex flex-col h-[500px]">
+                    <div className="p-8 border-b border-outline-variant">
+                        <h3 className="headline-sm font-bold flex items-center gap-3">
+                            <PieChart size={20} className="text-secondary" />
+                            By Category
+                        </h3>
                     </div>
-
-                    {/* Pagination Footer */}
-                    <div className="p-4 px-6 bg-surface-container-low border-t border-outline-variant flex items-center justify-between">
-                        <p className="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">
-                            Showing {Math.min(ledgerData.length, (currentPage - 1) * itemsPerPage + 1)}-{Math.min(ledgerData.length, currentPage * itemsPerPage)} of {ledgerData.length}
-                        </p>
-                        <div className="flex items-center gap-2">
-                            <button 
-                                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                disabled={currentPage === 1}
-                                className="h-8 w-8 rounded-lg flex items-center justify-center border border-outline-variant hover:bg-white/5 disabled:opacity-20"
-                            >
-                                <ChevronUp className="-rotate-90" size={16} />
-                            </button>
-                            <span className="body-sm font-black mx-2">{currentPage} / {totalPages || 1}</span>
-                            <button 
-                                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                disabled={currentPage === totalPages || totalPages === 0}
-                                className="h-8 w-8 rounded-lg flex items-center justify-center border border-outline-variant hover:bg-white/5 disabled:opacity-20"
-                            >
-                                <ChevronDown className="-rotate-90" size={16} />
-                            </button>
+                    <div className="flex-1 p-6 flex flex-col">
+                        <div className="flex-1 min-h-0">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <RePieChart>
+                                    <Pie
+                                        data={categoryData}
+                                        cx="50%"
+                                        cy="50%"
+                                        innerRadius={80}
+                                        outerRadius={120}
+                                        paddingAngle={5}
+                                        dataKey="value"
+                                    >
+                                        {categoryData.map((entry, index) => (
+                                            <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip />
+                                </RePieChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <div className="space-y-4 px-4 pb-4">
+                            {categoryData.map((cat, i) => (
+                                <div key={i} className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: cat.color }}></div>
+                                        <span className="body-md text-on-surface font-semibold">{cat.name}</span>
+                                    </div>
+                                    <span className="body-md font-bold text-on-surface-variant">{cat.value}%</span>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
-    );
-}
 
-function SortHeader({ label, sortKey, currentSort, onSort, textAlign = 'left' }: any) {
-    const isActive = currentSort?.key === sortKey;
-    return (
-        <th 
-            className={cn(
-                "px-6 py-4 label-sm text-on-surface-variant cursor-pointer hover:bg-white/5 transition-colors",
-                textAlign === 'right' && "text-right",
-                textAlign === 'center' && "text-center"
-            )}
-            onClick={() => onSort(sortKey)}
-        >
-            <div className={cn("flex items-center gap-2", textAlign === 'right' && "justify-end", textAlign === 'center' && "justify-center")}>
-                {label}
-                <div className="flex flex-col">
-                    <ChevronUp size={10} className={cn("transition-opacity", isActive && currentSort.direction === 'asc' ? "opacity-100" : "opacity-20")} />
-                    <ChevronDown size={10} className={cn("transition-opacity", -2, isActive && currentSort.direction === 'desc' ? "opacity-100" : "opacity-20")} />
+            {/* Bottom Row - Activity Log */}
+            <div className="card-default p-8 space-y-6">
+                <div className="flex items-center justify-between">
+                    <h3 className="headline-sm font-bold">Recent Financial Activity</h3>
+                    <button className="text-primary label-sm font-bold flex items-center gap-2 hover:gap-3 transition-all">
+                        VIEW ALL TRANSACTIONS
+                        <ArrowRight size={16} />
+                    </button>
                 </div>
-            </div>
-        </th>
-    );
-}
-
-function ReportStatCard({ title, value, icon: Icon, trend }: any) {
-    return (
-        <div className="card-default flex items-center gap-6 group hover:border-secondary/30 transition-all border border-outline-variant/30">
-            <div className="h-16 w-16 rounded-2xl bg-surface-container-highest flex items-center justify-center text-secondary group-hover:scale-110 transition-transform shadow-inner">
-                <Icon size={32} />
-            </div>
-            <div className="flex-1 min-w-0">
-                <p className="label-sm text-on-surface-variant/60 lowercase italic tracking-tight">{title}</p>
-                <div className="flex items-baseline gap-3 mt-1">
-                    <h3 className="headline-md !text-[28px] font-black text-on-surface truncate tracking-tighter">{value}</h3>
-                    <span className={cn(
-                        "flex items-center text-[10px] font-black",
-                        trend.positive ? "text-secondary" : "text-red-500"
-                    )}>
-                        {trend.positive ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />}
-                        {trend.val}
-                    </span>
+                <div className="divide-y divide-outline-variant">
+                    {payments?.slice(0, 5).map((payment: any, i: number) => (
+                        <div key={i} className="py-5 flex items-center justify-between group cursor-pointer hover:px-2 transition-all">
+                            <div className="flex items-center gap-5">
+                                <div className="p-3 bg-surface-container-high rounded-2xl group-hover:bg-primary/10 group-hover:text-primary transition-colors">
+                                    <DollarSign size={20} />
+                                </div>
+                                <div>
+                                    <div className="body-lg font-bold text-on-surface">Payment for Order #{payment.orderId.slice(-4).toUpperCase()}</div>
+                                    <div className="label-sm text-on-hint uppercase tracking-wider">{payment.method} • {new Date(payment.createdAt).toLocaleTimeString()}</div>
+                                </div>
+                            </div>
+                            <div className="text-right">
+                                <div className="body-lg font-bold text-primary">+KES {payment.amount.toLocaleString()}</div>
+                                <div className="label-sm text-on-hint uppercase tracking-tighter">Settled</div>
+                            </div>
+                        </div>
+                    ))}
                 </div>
             </div>
         </div>
     );
-}
+};
+
+const ArrowRight: React.FC<{ size?: number; className?: string }> = ({ size = 24, className }) => (
+    <svg 
+        width={size} 
+        height={size} 
+        viewBox="0 0 24 24" 
+        fill="none" 
+        stroke="currentColor" 
+        strokeWidth="2" 
+        strokeLinecap="round" 
+        strokeLinejoin="round" 
+        className={className}
+    >
+        <path d="M5 12h14M12 5l7 7-7 7"/>
+    </svg>
+);
+
+export default ReportsPage;
