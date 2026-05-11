@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { notFound, badRequest } from '../lib/errors';
 import { validate } from '../middleware/validate';
@@ -22,7 +23,14 @@ router.get(
                 },
                 orderBy: { createdAt: 'desc' },
             });
-            res.json(payments);
+            res.json(payments.map(p => ({
+                ...p,
+                amount: p.amount.toNumber(),
+                order: p.order ? {
+                    ...p.order,
+                    totalAmount: p.order.totalAmount.toNumber()
+                } : undefined
+            })));
         } catch (err) {
             next(err);
         }
@@ -43,7 +51,19 @@ router.get(
                 },
             });
             if (!payment) throw notFound('Payment not found');
-            res.json(payment);
+            res.json({
+                ...payment,
+                amount: payment.amount.toNumber(),
+                order: payment.order ? {
+                    ...payment.order,
+                    totalAmount: payment.order.totalAmount.toNumber(),
+                    items: payment.order.items.map(item => ({
+                        ...item,
+                        unitPrice: item.unitPrice.toNumber(),
+                        subtotal: item.subtotal.toNumber()
+                    }))
+                } : undefined
+            });
         } catch (err) {
             next(err);
         }
@@ -51,8 +71,10 @@ router.get(
 );
 
 // ── POST /api/payments ───────────────────────────────────────────────────────
+// FIX 8 — CRITICAL-010: Role guard added. Only STAFF+ can create payments.
 router.post(
     '/',
+    requireRole(Role.STAFF, Role.MANAGER, Role.TENANT_ADMIN, Role.SUPER_ADMIN),
     validate(createPaymentSchema),
     async (req: Request, res: Response, next: NextFunction) => {
         try {
@@ -65,7 +87,7 @@ router.post(
             });
             if (!order) throw notFound('Order not found in this tenant');
 
-            if (amount > order.totalAmount) {
+            if (new Prisma.Decimal(amount).greaterThan(order.totalAmount)) {
                 throw badRequest('Payment amount exceeds order total');
             }
 
@@ -73,13 +95,16 @@ router.post(
                 data: {
                     tenantId,
                     orderId,
-                    amount,
+                    amount: new Prisma.Decimal(amount),
                     method,
                     status: PaymentStatus.PENDING,
                 },
             });
 
-            res.status(201).json(payment);
+            res.status(201).json({
+                ...payment,
+                amount: payment.amount.toNumber()
+            });
         } catch (err) {
             next(err);
         }
@@ -104,7 +129,10 @@ router.put(
                 where: { id: req.params.id },
                 data: { status: req.body.status },
             });
-            res.json(updated);
+            res.json({
+                ...updated,
+                amount: updated.amount.toNumber()
+            });
         } catch (err) {
             next(err);
         }

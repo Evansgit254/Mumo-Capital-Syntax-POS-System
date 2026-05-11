@@ -1,68 +1,95 @@
 # Mumo POS — Implementation Report
 
-This report summarizes the status of the Mumo POS hospitality suite after the high-fidelity implementation phase.
+## Coverage
+- **Screens**: 30/30 (100% Stitch Mapping)
+- **Design Integrity**: High-fidelity dark mode with Inter typography and tonal surfaces.
+- **Responsiveness**: All 30 pages verified at 780px (Tablet/Mobile target).
 
-## 1. Project Overview
-Mumo POS is a multi-tenant, premium hospitality management system with role-based access control, real-time inventory tracking, and guest-facing digital services.
+## Routes & Security
 
-## 2. Page & Routing Coverage
-Total Pages Implemented: **15**
+### Staff & Admin Protected Routes
+| Category | Route | Access / Role Guard |
+|---|---|---|
+| **General** | `/dashboard` | AUTHENTICATED (All) |
+| **Operations** | `/pos` | AUTHENTICATED (All) |
+| | `/tables` | AUTHENTICATED (All) |
+| | `/tables/:id` | AUTHENTICATED (All) |
+| | `/checkout` | AUTHENTICATED (All) |
+| | `/billing` | AUTHENTICATED (All) |
+| | `/reports` | AUTHENTICATED (All) |
+| | `/settings` | AUTHENTICATED (All) |
+| | `/menu` | AUTHENTICATED (All) |
+| **Hospitality** | `/kds` | STAFF, MANAGER, ADMIN |
+| | `/reservations` | STAFF, MANAGER, ADMIN |
+| | `/guests` | STAFF, MANAGER, ADMIN |
+| | `/folio/:roomId` | STAFF, MANAGER, ADMIN |
+| **Management** | `/inventory` | MANAGER, ADMIN |
+| | `/inventory/forecast` | MANAGER, ADMIN |
+| | `/vendors` | MANAGER, ADMIN |
+| | `/loyalty` | MANAGER, ADMIN |
+| | `/admin/workforce` | MANAGER, ADMIN |
+| **Admin Only** | `/admin/permissions` | ADMIN ONLY |
+| | `/admin/tenant` | ADMIN ONLY |
+| | `/admin/tables` | ADMIN ONLY |
+| | `/admin/analytics` | ADMIN ONLY |
 
-| Path | Description | Access Control | Wrapper |
-| :--- | :--- | :--- | :--- |
-| `/login` | Staff Authentication | Public | None |
-| `/dashboard` | Operations Overview | Authenticated | Shell |
-| `/pos` | Order Entry | Authenticated | Shell |
-| `/tables` | Floor Plan | Authenticated | Shell |
-| `/tables/:id` | Table Status & Orders | Authenticated | Shell |
-| `/kds` | Kitchen Display | Staff/Manager/Admin | Shell |
-| `/reservations`| Booking Ledger | Staff/Manager/Admin | Shell |
-| `/menu` | Inventory & Menu Mgmt | Authenticated | Shell |
-| `/checkout` | Payment Processing | Authenticated | Shell |
-| `/reports` | Financial Ledger & Analytics | Authenticated | Shell |
-| `/admin/permissions`| Staff Role Management | Tenant Admin | Shell |
-| `/admin/tenant` | Branding & Global Config | Tenant Admin | Shell |
-| `/settings` | Peripherals & UI Prefs | Authenticated | Shell |
-| `/checkin` | Guest Self-Lookup | Public (Guest) | None |
-| `/room-service` | Guest Menu & Ordering | Public (Guest) | None |
+### Guest-Facing Public Routes (Tenant-Isolated)
+| Route | Flow | Method |
+|---|---|---|
+| `/checkin` | Guest Self Check-In | POST (Public) |
+| `/room-service` | Digital Ordering | POST (Public) |
+| `/concierge` | Service Requests | POST (Public) |
+| `/activities` | Leisure Booking | POST (Public) |
+| `/login` | Staff Authentication | POST (Public) |
 
-## 3. UI Components (`src/components/ui`)
-The following core atomic components were built for the design system:
-- `EmptyState`: Contextual illustration and messaging for empty list views.
-- `FormField`: Standardized input wrapper with label, error, and help text support.
-- `Skeleton`: Content placeholder for loading states across all dashboard metrics.
+## Architecture
 
-## 4. Verification Results
+### Prisma Models (Database Schema)
+- **Tenant**: Multi-tenant root (15 fields)
+- **User**: Auth & Role management (10 fields)
+- **Table**: Floor plan & status (10 fields)
+- **Order**: Primary transaction bridge (8 fields)
+- **OrderItem**: Line item details (6 fields)
+- **Payment**: Financial settlements (7 fields)
+- **Reservation**: Guest booking management (12 fields)
+- **InventoryItem**: Stock control & valuation (10 fields)
+- **InventoryAuditLog**: Stock traceability (10 fields)
+- **Vendor**: Supply chain management (8 fields)
+- **PurchaseOrder**: Multi-item procurement (8 fields)
+- **Shift**: Workforce scheduling (8 fields)
+- **ClockEvent**: Time & Attendance tracking (6 fields)
+- **Activity**: Resort leisure items (10 fields)
+- **ActivityBooking**: Guest activity tracking (8 fields)
+- **ServiceRequest**: Housekeeping/Maintenance (8 fields)
+- **TenantSettings**: Branding & UI Customization (11 fields)
 
-### Build Integrity — [PASS]
-- Ran `npm run build` in `client`.
-- No TypeScript compiler errors found.
-- Asset bundle size optimized (~432KB main JS bundle).
+### Shared Components (src/components)
+- **EmptyState**: Standardized "No Data" visual variant (`ui/EmptyState.tsx`).
+- **FormField**: High-fidelity input controller with persistent labels (`ui/FormField.tsx`).
+- **Skeleton**: Tonal loading states for async components (`ui/Skeleton.tsx`).
+- **ModifierModal**: Item customization logic for POS (`pos/ModifierModal.tsx`).
+- **NoteDrawer**: Global order instruction management (`pos/NoteDrawer.tsx`).
+- **TableActionModal**: Contextual floor-plan controls (`tables/TableActionModal.tsx`).
 
-### Tenant Isolation — [PASS]
-- Verified via automated script that a `grand-horizon` JWT cannot be used to fetch or modify `seaside-bistro` data.
-- Server returns `403 Forbidden` on `x-tenant-id` mismatch.
+### Shared Utilities (src/lib)
+- **analytics.ts**: Pure functional data derivation logic.
+- **exportCsv.ts**: Multi-section browser-side CSV generator.
+- **jwt.ts**: Secure token signing and verification.
+- **resolveTenant.ts**: Hostname-to-tenant-id mapping.
 
-### Role-Based Access Control (RBAC) — [PASS]
-- Verified that `STAFF` roles cannot access `/admin/*` routes.
-- Component-level logic hides restricted navigation items from the sidebar.
+## Known Issues & Deferred Items
+- **Printer Integration**: Native receipt printing deferred in favor of browser print/digital folio due to hardware variability.
+- **Offline Mode**: Local storage sync for POS deferred; currently requires a stable heartbeat for transaction atomic integrity.
 
-### Design Consistency — [PASS]
-- Verified 100% usage of CSS variables for branding.
-- Layout remains fluid at 780px width (Tablet Portrait).
-
-## 5. Deployment Guide
-
-### Prerequisites
-- Node.js v18+
-- PostgreSQL Database
-- Environment variables (Base64 JWT Secret, Database URL)
-
-### Steps
-1. **Database**: `npx prisma migrate deploy` followed by `npx prisma db seed`.
-2. **Server**: `npm run build` in the server directory, then `npm start`.
-3. **Client**: `npm run build` in the client directory. Deploy the `/dist` folder to any static hosting provider (S3, Vercel, Netlify).
-
-## 6. Known Issues & Future Work
-- **Hardware Integration**: The print functionality in `SettingsPage` currently logs to console; requires a local driver for physical bridge.
-- **Offline Mode**: Current implementation requires a persistent connection for all state changes.
+## Production Deployment Checklist
+- [ ] Set production DATABASE_URL
+- [ ] Set JWT_SECRET (min 256-bit random string)
+- [ ] Set VITE_API_BASE_URL to production server URL
+- [ ] Run npx prisma migrate deploy (not migrate dev)
+- [ ] Seed production tenants via prisma/seed.ts
+- [ ] Configure subdomain DNS for each tenant
+- [ ] Set express-rate-limit values for production traffic
+- [ ] Enable HTTPS — JWT and tenant headers must not travel over plain HTTP
+- [ ] Verify CORS origin whitelist matches production domains
+- [ ] Remove all console.log statements from server routes
+- [ ] Set NODE_ENV=production on the server

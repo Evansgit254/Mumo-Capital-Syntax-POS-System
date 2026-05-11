@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { notFound, badRequest } from '../lib/errors';
 import { validate } from '../middleware/validate';
@@ -41,17 +42,23 @@ router.post(
                 throw badRequest(`Invalid discount code: ${code}`);
             }
 
-            // Calculate new total
-            let discountAmount: number;
+            // Calculate new total using Decimals
+            let discountAmount: Prisma.Decimal;
+            const discountValue = new Prisma.Decimal(discount.value);
+
             if (discount.type === 'percent') {
-                discountAmount = Math.round(order.totalAmount * (discount.value / 100) * 100) / 100;
+                // discountAmount = order.totalAmount * (discountPercentage / 100)
+                discountAmount = order.totalAmount.times(discountValue.dividedBy(100));
             } else {
-                discountAmount = discount.value;
+                discountAmount = discountValue;
             }
 
             // Ensure discount doesn't exceed order total
-            discountAmount = Math.min(discountAmount, order.totalAmount);
-            const newTotal = Math.round((order.totalAmount - discountAmount) * 100) / 100;
+            if (discountAmount.greaterThan(order.totalAmount)) {
+                discountAmount = order.totalAmount;
+            }
+
+            const newTotal = order.totalAmount.minus(discountAmount);
 
             // Update order total
             const updated = await prisma.order.update({
@@ -63,9 +70,9 @@ router.post(
                 success: true,
                 code,
                 label: discount.label,
-                discountAmount,
-                originalTotal: order.totalAmount,
-                newTotal: updated.totalAmount,
+                discountAmount: discountAmount.toNumber(),
+                originalTotal: order.totalAmount.toNumber(),
+                newTotal: updated.totalAmount.toNumber(),
             });
         } catch (err) {
             next(err);

@@ -16,7 +16,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
             where: { tenantId, isAvailable: true },
             orderBy: { name: 'asc' },
         });
-        res.json(items);
+        res.json(items.map(item => ({ ...item, price: item.price.toNumber() })));
     } catch (err) {
         next(err);
     }
@@ -30,7 +30,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
             where: { tenantId },
             orderBy: { name: 'asc' },
         });
-        res.json(items);
+        res.json(items.map(item => ({ ...item, price: item.price.toNumber() })));
     } catch (err) {
         next(err);
     }
@@ -44,7 +44,7 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
             where: { id: req.params.id, tenantId },
         });
         if (!item) throw notFound('Menu item not found');
-        res.json(item);
+        res.json({ ...item, price: item.price.toNumber() });
     } catch (err) {
         next(err);
     }
@@ -61,7 +61,7 @@ router.post(
             const item = await prisma.menuItem.create({
                 data: { ...req.body, tenantId },
             });
-            res.status(201).json(item);
+            res.status(201).json({ ...item, price: item.price.toNumber() });
         } catch (err) {
             next(err);
         }
@@ -87,7 +87,7 @@ router.put(
                 where: { id: req.params.id },
                 data: req.body,
             });
-            res.json(updated);
+            res.json({ ...updated, price: updated.price.toNumber() });
         } catch (err) {
             next(err);
         }

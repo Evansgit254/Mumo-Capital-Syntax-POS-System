@@ -1,75 +1,157 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
 import bcrypt from 'bcrypt';
+import rateLimit from 'express-rate-limit';
 import { prisma } from '../lib/prisma';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../lib/jwt';
-import { unauthorized, notFound, conflict, badRequest } from '../lib/errors';
+import { unauthorized, notFound, conflict, forbidden } from '../lib/errors';
 import { validate } from '../middleware/validate';
-import { loginSchema, registerSchema, refreshSchema } from '../validators/auth';
+import { authenticate } from '../middleware/auth';
+import { requireRole } from '../middleware/requireRole';
+import { loginSchema, registerSchema } from '../validators/auth';
 import { AuthPayload, Role } from '@mumo/types';
 
 const router = Router();
 const SALT_ROUNDS = 12;
+const REFRESH_TOKEN_EXPIRY_DAYS = 7;
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
-// ── POST /auth/register ──────────────────────────────────────────────────────
-router.post('/register', validate(registerSchema), async (req: Request, res: Response, next: NextFunction) => {
-    try {
-        const { email, password, firstName, lastName, tenantId, role } = req.body;
+/**
+ * Set the refresh token as an httpOnly cookie.
+ * FIX 11 — WARN-018: Never expose refresh tokens in response body or localStorage.
+ */
+function setRefreshCookie(res: Response, token: string): void {
+    res.cookie('refreshToken', token, {
+        httpOnly: true,
+        secure: IS_PRODUCTION,
+        sameSite: 'strict',
+        path: '/auth',
+        maxAge: REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60 * 1000,
+    });
+}
 
-        // Verify tenant exists
-        const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
-        if (!tenant) {
-            throw notFound('Tenant not found');
-        }
+function clearRefreshCookie(res: Response): void {
+    res.clearCookie('refreshToken', {
+        httpOnly: true,
+        secure: IS_PRODUCTION,
+        sameSite: 'strict',
+        path: '/auth',
+    });
+}
 
-        // Check for existing user within tenant
-        const existing = await prisma.user.findUnique({
-            where: { tenantId_email: { tenantId, email } },
-        });
-        if (existing) {
-            throw conflict('A user with this email already exists in this tenant');
-        }
-
-        const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
-
-        const user = await prisma.user.create({
-            data: {
-                email,
-                password: hashedPassword,
-                firstName,
-                lastName,
-                tenantId,
-                role: role || Role.STAFF,
-            },
-        });
-
-        const payload: AuthPayload = {
-            userId: user.id,
-            tenantId: user.tenantId,
-            role: user.role as Role,
-        };
-
-        const accessToken = signAccessToken(payload);
-        const refreshToken = signRefreshToken(payload);
-
-        res.status(201).json({
-            accessToken,
-            refreshToken,
-            user: {
-                id: user.id,
-                email: user.email,
-                firstName: user.firstName,
-                lastName: user.lastName,
-                role: user.role,
-                tenantId: user.tenantId,
-            },
-        });
-    } catch (err) {
-        next(err);
-    }
+// ── Rate Limiter (FIX 3 — CRITICAL-002) ─────────────────────────────────────
+const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 15,
+    message: { error: 'Too many attempts. Try again in 15 minutes.' },
+    standardHeaders: true,
+    legacyHeaders: false,
 });
 
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Hash a refresh token for storage. We store the hash, not the raw token,
+ * so a database breach doesn't expose valid tokens.
+ */
+function hashToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
+}
+
+/**
+ * Store a refresh token in the database.
+ */
+async function storeRefreshToken(rawToken: string, userId: string, tenantId: string): Promise<void> {
+    const expiresAt = new Date();
+    expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRY_DAYS);
+
+    await prisma.refreshToken.create({
+        data: {
+            token: hashToken(rawToken),
+            userId,
+            tenantId,
+            expiresAt,
+        },
+    });
+}
+
+/**
+ * Revoke a refresh token by setting revokedAt.
+ */
+async function revokeRefreshToken(rawToken: string): Promise<boolean> {
+    const hashed = hashToken(rawToken);
+    const result = await prisma.refreshToken.updateMany({
+        where: { token: hashed, revokedAt: null },
+        data: { revokedAt: new Date() },
+    });
+    return result.count > 0;
+}
+
+// ── POST /auth/register ──────────────────────────────────────────────────────
+// FIX 2 — CRITICAL-003: Registration is now admin-only.
+// New users are always created as STAFF. Role assignment happens via
+// PUT /api/users/:id/role (already admin-only).
+router.post(
+    '/register',
+    authLimiter,
+    authenticate,
+    requireRole(Role.TENANT_ADMIN),
+    validate(registerSchema),
+    async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const { email, password, firstName, lastName, tenantId } = req.body;
+
+            // Admin can only create users within their own tenant
+            if (tenantId !== req.user!.tenantId) {
+                throw forbidden('You can only create users in your own tenant');
+            }
+
+            // Verify tenant exists
+            const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+            if (!tenant) {
+                throw notFound('Tenant not found');
+            }
+
+            // Check for existing user within tenant
+            const existing = await prisma.user.findUnique({
+                where: { tenantId_email: { tenantId, email } },
+            });
+            if (existing) {
+                throw conflict('A user with this email already exists in this tenant');
+            }
+
+            const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+
+            // FIX 2: Role is always STAFF — ignore anything the caller sends
+            const user = await prisma.user.create({
+                data: {
+                    email,
+                    password: hashedPassword,
+                    firstName,
+                    lastName,
+                    tenantId,
+                    role: Role.STAFF,
+                },
+            });
+
+            res.status(201).json({
+                user: {
+                    id: user.id,
+                    email: user.email,
+                    firstName: user.firstName,
+                    lastName: user.lastName,
+                    role: user.role,
+                    tenantId: user.tenantId,
+                },
+            });
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
 // ── POST /auth/login ─────────────────────────────────────────────────────────
-router.post('/login', validate(loginSchema), async (req: Request, res: Response, next: NextFunction) => {
+router.post('/login', authLimiter, validate(loginSchema), async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { email, password } = req.body;
 
@@ -87,8 +169,13 @@ router.post('/login', validate(loginSchema), async (req: Request, res: Response,
             throw unauthorized('Invalid email or password');
         }
 
+        // FIX 4 — CRITICAL-011: Block inactive users from logging in
+        if (user.status === 'INACTIVE') {
+            throw forbidden('Account has been deactivated. Contact your administrator.');
+        }
+
         const payload: AuthPayload = {
-            userId: user.id,
+            id: user.id,
             tenantId: user.tenantId,
             role: user.role as Role,
         };
@@ -96,9 +183,14 @@ router.post('/login', validate(loginSchema), async (req: Request, res: Response,
         const accessToken = signAccessToken(payload);
         const refreshToken = signRefreshToken(payload);
 
+        // FIX 5 — CRITICAL-005: Store refresh token hash in DB
+        await storeRefreshToken(refreshToken, user.id, user.tenantId);
+
+        // FIX 11 — WARN-018: Set refresh token as httpOnly cookie, not in body
+        setRefreshCookie(res, refreshToken);
+
         res.json({
             accessToken,
-            refreshToken,
             user: {
                 id: user.id,
                 email: user.email,
@@ -115,28 +207,68 @@ router.post('/login', validate(loginSchema), async (req: Request, res: Response,
 });
 
 // ── POST /auth/refresh ───────────────────────────────────────────────────────
-router.post('/refresh', validate(refreshSchema), async (req: Request, res: Response, next: NextFunction) => {
+// FIX 11 — WARN-018: Read refresh token from httpOnly cookie, not request body
+router.post('/refresh', authLimiter, async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const { refreshToken } = req.body;
+        const refreshToken: string | undefined = req.cookies?.refreshToken;
 
-        // verifyRefreshToken throws AppError on expiry or invalid
+        if (!refreshToken) {
+            throw unauthorized('No refresh token provided — please sign in');
+        }
+
+        // Verify JWT signature and expiry
         const decoded = verifyRefreshToken(refreshToken);
 
-        // Ensure the user still exists and hasn't been deactivated
+        // FIX 5 — CRITICAL-005: Validate against DB record
+        const hashed = hashToken(refreshToken);
+        const storedToken = await prisma.refreshToken.findUnique({
+            where: { token: hashed },
+        });
+
+        if (!storedToken) {
+            throw unauthorized('Refresh token not recognized — please sign in again');
+        }
+
+        if (storedToken.revokedAt) {
+            // Token reuse detected — possible theft. Revoke ALL tokens for this user.
+            await prisma.refreshToken.updateMany({
+                where: { userId: storedToken.userId, revokedAt: null },
+                data: { revokedAt: new Date() },
+            });
+            clearRefreshCookie(res);
+            throw unauthorized('Refresh token has been revoked — please sign in again');
+        }
+
+        if (storedToken.expiresAt < new Date()) {
+            clearRefreshCookie(res);
+            throw unauthorized('Refresh token has expired — please sign in again');
+        }
+
+        // Ensure the user still exists and is active
         const user = await prisma.user.findUnique({
-            where: { id: decoded.userId },
+            where: { id: decoded.id },
         });
 
         if (!user) {
+            clearRefreshCookie(res);
             throw unauthorized('User no longer exists');
         }
 
+        if (user.status === 'INACTIVE') {
+            clearRefreshCookie(res);
+            throw forbidden('Account has been deactivated. Contact your administrator.');
+        }
+
         if (user.tenantId !== decoded.tenantId) {
+            clearRefreshCookie(res);
             throw unauthorized('Token tenant mismatch — please sign in again');
         }
 
+        // Rotate: revoke old token, issue new pair
+        await revokeRefreshToken(refreshToken);
+
         const payload: AuthPayload = {
-            userId: user.id,
+            id: user.id,
             tenantId: user.tenantId,
             role: user.role as Role,
         };
@@ -144,13 +276,54 @@ router.post('/refresh', validate(refreshSchema), async (req: Request, res: Respo
         const newAccessToken = signAccessToken(payload);
         const newRefreshToken = signRefreshToken(payload);
 
+        // Store the new refresh token
+        await storeRefreshToken(newRefreshToken, user.id, user.tenantId);
+
+        // FIX 11: Set new refresh token as httpOnly cookie
+        setRefreshCookie(res, newRefreshToken);
+
         res.json({
             accessToken: newAccessToken,
-            refreshToken: newRefreshToken,
         });
     } catch (err) {
         next(err);
     }
 });
+
+// ── POST /auth/logout ────────────────────────────────────────────────────────
+// FIX 5 + FIX 11: Revoke refresh token from cookie and clear it
+router.post('/logout', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const refreshToken: string | undefined = req.cookies?.refreshToken;
+
+        if (refreshToken && typeof refreshToken === 'string') {
+            await revokeRefreshToken(refreshToken);
+        }
+
+        clearRefreshCookie(res);
+        res.status(204).send();
+    } catch (err) {
+        next(err);
+    }
+});
+
+// ── Cleanup Job ──────────────────────────────────────────────────────────────
+// FIX 5: Delete expired refresh tokens every 24 hours
+const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+setInterval(async () => {
+    try {
+        const cutoff = new Date();
+        cutoff.setDate(cutoff.getDate() - 1); // 1 day past expiry
+        const result = await prisma.refreshToken.deleteMany({
+            where: { expiresAt: { lt: cutoff } },
+        });
+        if (result.count > 0) {
+            console.log(`[RefreshToken Cleanup] Deleted ${result.count} expired tokens`);
+        }
+    } catch (err) {
+        console.error('[RefreshToken Cleanup] Error:', err);
+    }
+}, CLEANUP_INTERVAL_MS);
 
 export default router;

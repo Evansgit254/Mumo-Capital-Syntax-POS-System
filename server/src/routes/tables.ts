@@ -3,7 +3,7 @@ import { prisma } from '../lib/prisma';
 import { notFound } from '../lib/errors';
 import { validate } from '../middleware/validate';
 import { requireRole } from '../middleware/requireRole';
-import { createTableSchema, updateTableSchema } from '../validators/table';
+import { createTableSchema, updateTableSchema, batchUpdateTablesSchema } from '../validators/table';
 import { Role } from '@mumo/types';
 
 const router = Router();
@@ -80,7 +80,22 @@ router.get('/:id/orders', async (req: Request, res: Response, next: NextFunction
             },
             orderBy: { createdAt: 'desc' },
         });
-        res.json(orders);
+        
+        const serialized = orders.map(order => ({
+            ...order,
+            totalAmount: order.totalAmount.toNumber(),
+            items: order.items.map(item => ({
+                ...item,
+                unitPrice: item.unitPrice.toNumber(),
+                subtotal: item.subtotal.toNumber(),
+                menuItem: item.menuItem ? {
+                    ...item.menuItem,
+                    price: item.menuItem.price.toNumber()
+                } : undefined
+            }))
+        }));
+
+        res.json(serialized);
     } catch (err) {
         next(err);
     }
@@ -98,6 +113,50 @@ router.post(
                 data: { ...req.body, tenantId },
             });
             res.status(201).json(table);
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+// ── PUT /api/tables/batch (Floor Plan Save) ───────────────────────────────────
+router.put(
+    '/batch',
+    requireRole(Role.TENANT_ADMIN, Role.SUPER_ADMIN),
+    validate(batchUpdateTablesSchema),
+    async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const { tenantId } = req.user!;
+            const { tables } = req.body;
+
+            const tableIds = tables.map((t: any) => t.id);
+
+            // 1. Validate all tables belong to the tenant
+            const existingCount = await prisma.table.count({
+                where: {
+                    id: { in: tableIds },
+                    tenantId
+                }
+            });
+
+            if (existingCount !== tables.length) {
+                return res.status(403).json({ 
+                    error: 'Access denied: Some tables do not belong to your organization.' 
+                });
+            }
+
+            // 2. Execute transaction
+            const result = await prisma.$transaction(
+                tables.map((t: any) => {
+                    const { id, ...data } = t;
+                    return prisma.table.update({
+                        where: { id },
+                        data
+                    });
+                })
+            );
+
+            res.json({ updated: result.length, tables: result });
         } catch (err) {
             next(err);
         }
@@ -164,20 +223,23 @@ router.post(
             const table = await prisma.table.findFirst({ where: { id, tenantId } });
             if (!table) throw notFound('Table not found');
 
-            // Update all active orders to SERVED
-            await prisma.order.updateMany({
-                where: { 
-                    tableId: id, 
-                    tenantId, 
-                    status: { notIn: ['CANCELLED', 'SERVED'] } 
-                },
-                data: { status: 'SERVED' }
-            });
+            // Execute as transaction
+            const updated = await prisma.$transaction(async (tx) => {
+                // Update all active orders to SERVED
+                await tx.order.updateMany({
+                    where: { 
+                        tableId: id, 
+                        tenantId, 
+                        status: { notIn: ['CANCELLED', 'SERVED'] } 
+                    },
+                    data: { status: 'SERVED' }
+                });
 
-            // Mark table as available
-            const updated = await prisma.table.update({
-                where: { id },
-                data: { isOccupied: false }
+                // Mark table as available
+                return tx.table.update({
+                    where: { id },
+                    data: { isOccupied: false }
+                });
             });
 
             res.json(updated);
@@ -211,15 +273,18 @@ router.post(
 
             if (targetTable?.isOccupied) throw new Error('Target table is already occupied');
 
-            // 2. Transfer orders
-            await prisma.order.updateMany({
-                where: { tableId: id, tenantId, status: { notIn: ['CANCELLED', 'SERVED'] } },
-                data: { tableId: targetTableId }
-            });
+            // Execute as transaction
+            const updated = await prisma.$transaction(async (tx) => {
+                // 2. Transfer orders
+                await tx.order.updateMany({
+                    where: { tableId: id, tenantId, status: { notIn: ['CANCELLED', 'SERVED'] } },
+                    data: { tableId: targetTableId }
+                });
 
-            // 3. Swap occupancy status
-            await prisma.table.update({ where: { id }, data: { isOccupied: false } });
-            const updated = await prisma.table.update({ where: { id: targetTableId }, data: { isOccupied: true } });
+                // 3. Swap occupancy status
+                await tx.table.update({ where: { id }, data: { isOccupied: false } });
+                return tx.table.update({ where: { id: targetTableId }, data: { isOccupied: true } });
+            });
 
             res.json(updated);
         } catch (err) {
@@ -247,14 +312,17 @@ router.post(
             });
             if (tables.length < 2) throw notFound('One or both tables not found');
 
-            // 2. Move orders
-            await prisma.order.updateMany({
-                where: { tableId: id, tenantId, status: { notIn: ['CANCELLED', 'SERVED'] } },
-                data: { tableId: targetTableId }
-            });
+            // Execute as transaction
+            const updated = await prisma.$transaction(async (tx) => {
+                // 2. Move orders
+                await tx.order.updateMany({
+                    where: { tableId: id, tenantId, status: { notIn: ['CANCELLED', 'SERVED'] } },
+                    data: { tableId: targetTableId }
+                });
 
-            // 3. Release source table
-            const updated = await prisma.table.update({ where: { id }, data: { isOccupied: false } });
+                // 3. Release source table
+                return tx.table.update({ where: { id }, data: { isOccupied: false } });
+            });
 
             res.json(updated);
         } catch (err) {

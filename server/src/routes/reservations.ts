@@ -49,18 +49,22 @@ router.post('/:id/checkin', async (req: Request, res: Response, next: NextFuncti
         if (!reservation) throw notFound('Reservation not found');
         if (reservation.status === ReservationStatus.SEATED) throw badRequest('Guest is already seated');
 
-        const updated = await prisma.reservation.update({
-            where: { id },
-            data: { status: ReservationStatus.SEATED },
-            include: { table: true }
-        });
-
-        if (updated.tableId) {
-            await prisma.table.update({
-                where: { id: updated.tableId },
-                data: { isOccupied: true }
+        // Use transaction for atomic check-in
+        const updated = await prisma.$transaction(async (tx) => {
+            const upd = await tx.reservation.update({
+                where: { id },
+                data: { status: ReservationStatus.SEATED },
+                include: { table: true }
             });
-        }
+
+            if (upd.tableId) {
+                await tx.table.update({
+                    where: { id: upd.tableId },
+                    data: { isOccupied: true }
+                });
+            }
+            return upd;
+        });
 
         res.json(updated);
     } catch (err) {
@@ -251,19 +255,23 @@ router.post(
                 throw badRequest('Guest is already seated');
             }
 
-            const updated = await prisma.reservation.update({
-                where: { id: req.params.id },
-                data: { status: ReservationStatus.SEATED },
-                include: { table: true },
-            });
-
-            // If the reservation has a table, mark it as occupied
-            if (updated.tableId) {
-                await prisma.table.update({
-                    where: { id: updated.tableId },
-                    data: { isOccupied: true },
+            // Use transaction for atomic check-in
+            const updated = await prisma.$transaction(async (tx) => {
+                const upd = await tx.reservation.update({
+                    where: { id: req.params.id },
+                    data: { status: ReservationStatus.SEATED },
+                    include: { table: true },
                 });
-            }
+
+                // If the reservation has a table, mark it as occupied
+                if (upd.tableId) {
+                    await tx.table.update({
+                        where: { id: upd.tableId },
+                        data: { isOccupied: true },
+                    });
+                }
+                return upd;
+            });
 
             res.json(updated);
         } catch (err) {

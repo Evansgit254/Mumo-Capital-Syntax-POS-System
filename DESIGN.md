@@ -216,38 +216,49 @@ Boundary lines: 1px `#383838` (inactive) → teal `#008B8B` (active focus).
 
 All screens are **MOBILE** device type (780px rendered width).
 
-| # | Screen ID | Title | Height |
+## 9. Screen Inventory — Implementation Status
+
+All screens are **MOBILE** device type (780px rendered width).
+
+### 🟢 Built & Mapped (30/30 Screens ✅)
+These screens have a physical implementation in the `client/src/pages` directory and are mapped in `App.tsx`.
+
+| # | Screen ID | Title | File / Route |
 |---|---|---|---|
-| 1 | `3a2569bfb2424714985a86b04f865cc1` | Staff & Workforce Management | 1768px |
-| 2 | `8ae3a59c54a44db883120ab9880f39c5` | Loyalty & Discounts | 3912px |
-| 3 | `4e42d7ddaea74d38a0a334150cdf0ca4` | Staff Dashboard | 4430px |
-| 4 | `66b8f6b9f0d248978ca3c29125b9e4f8` | Tenant Administration | 4580px |
-| 5 | `4c273cf1427d4fd4a999ab8410f5c925` | Inventory Forecasting | 1768px |
-| 6 | `7c2dfdcfba5f4482983dff23fe46eda4` | Reports & Analytics | 3152px |
-| 7 | `0ed64813b0924c3ca6f77d7c66ae1dce` | Table Service Details | 4930px |
-| 8 | `3986ee8f141b4417b3cbccf744a0d4cd` | Billing & Settlement | 5538px |
-| 9 | `5259bede7fae4862b94e87ad3eb19c0e` | Guest Folio & Checkout | 2940px |
-| 10 | `ad99f7a7c5a34e169ff44e1ec4199ef8` | Reservations & Waitlist | 4320px |
-| 11 | `dec2b042d5ee4d50a3b920df5923480f` | Vendor & Supply Chain | 1768px |
-| 12 | `57328cffa5584a919e1d9b16cff297f7` | Digital Room Service | 4742px |
-| 13 | `4c4d4e2067ef42888af73626500e8ea2` | POS Interface | 1770px |
-| 14 | `2474a8d37d374830a594806fbf8f003e` | Hardware & Peripherals | 3928px |
-| 15 | `62e92a4da9e34d41a5aa2ae0dbe6ffce` | Activity Booking | 8750px |
-| 16 | `fe505a450ff147b0b67deda3a3ec38ff` | Outlet Menu Manager | 1768px |
-| 17 | `2495c56e71204415afe6f568cabe0f7e` | Guest Folio & Checkout (v2) | 2940px |
-| 18 | `d1f11880c5b14f069a9b7d5b7b471ce9` | Guest & Room Directory | 2962px |
-| 19 | `941c5ced38ba46b6b5d1e33332e1f20a` | Digital Concierge | 3178px |
-| 20 | `c28f9249a5224f42a38b0b019ffa03d8` | The Grand Horizon Resort — Splash | 884px |
-| 21 | `1da4a1ffc92b4c86b9794f6f55574391` | Table & Seat Management | 1768px |
-| 22 | `4e7916fa6951475795a9a2c6f357af59` | Kitchen Display System (KDS) | 1768px |
-| 23 | `7b27ec1486764dafb6973b2ae7c399dd` | Interactive Floor Plan | 2396px |
-| 24 | `bf12896e24494a728181606dd7dbc704` | Staff Permissions Management | 4198px |
-| 25 | `273b1837fb19440b83325793501695fb` | Inventory Audit & Adjustment | 1786px |
-| 26 | `f736bf612c934514ba9ada7936f75b3a` | Mobile Check-In | 2210px |
-| 27 | `ff72144b8e194c43a85e91ecb0679cdd` | Outlet Customization (Detailed) | 6730px |
-| 28 | `68b38b7587514f23b72d713f8134abcb` | Inventory & Stock Control | 4448px |
-| 29 | `58d9a27742d449dd9d0bc2c5d2823095` | Outlet Customization | 5162px |
-| 30 | `e78c34d5c3594854b68226dc070a5e1b` | Resort Executive Analytics | 1768px |
+| 1 | `3a2569bfb2424714985a86b04f865cc1` | Staff & Workforce Management | `admin/WorkforcePage.tsx` |
+| 2 | `8ae3a59c54a44db883120ab9880f39c5` | Loyalty & Discounts | `LoyaltyPage.tsx` |
+| 3 | `4e42d7ddaea74d38a0a334150cdf0ca4` | Staff Dashboard | `DashboardPage.tsx` |
+| 4 | `66b8f6b9f0d248978ca3c29125b9e4f8` | Tenant Administration | `admin/TenantPage.tsx` |
+| 6 | `7c2dfdcfba5f4482983dff23fe46eda4` | Reports & Analytics | `ReportsPage.tsx` |
+| 7 | `0ed64813b0924c3ca6f77d7c66ae1dce` | Table Service Details | `TableDetailsPage.tsx` |
+| 8 | `3986ee8f141b4417b3cbccf744a0d4cd` | Billing & Settlement | `BillingPage.tsx` |
+| 9 | `5259bede7fae4862b94e87ad3eb19c0e` | Guest Folio & Checkout | `CheckoutPage.tsx` / `GuestFolioPage.tsx` |
+| 10 | `ad99f7a7c5a34e169ff44e1ec4199ef8` | Reservations & Waitlist | `ReservationsPage.tsx` |
+| 12 | `57328cffa5584a919e1d9b16cff297f7` | Digital Room Service | `RoomServicePage.tsx` |
+| 13 | `4c4d4e2067ef42888af73626500e8ea2` | POS Interface | `POSPage.tsx` |
+| 14 | `2474a8d37d374830a594806fbf8f003e` | Hardware / Settings / Outlet Customization | `SettingsPage.tsx` |
+| 15 | `62e92a4da9e34d41a5aa2ae0dbe6ffce` | Activity Booking | `ActivityBookingPage.tsx` |
+| 16 | `fe505a450ff147b0b67deda3a3ec38ff` | Outlet Menu Manager | `MenuManagerPage.tsx` |
+| 18 | `d1f11880c5b14f069a9b7d5b7b471ce9` | Guest & Room Directory | `GuestDirectoryPage.tsx` |
+| 19 | `941c5ced38ba46b6b5d1e33332e1f20a` | Digital Concierge | `ConciergePage.tsx` |
+| 20 | `c28f9249a5224f42a38b0b019ffa03d8` | Splash (Login) | `LoginPage.tsx` |
+| 22 | `4e7916fa6951475795a9a2c6f357af59` | Kitchen Display System (KDS) | `KDSPage.tsx` |
+| 23 | `7b27ec1486764dafb6973b2ae7c399dd` | Interactive Floor Plan | `TableMapPage.tsx` |
+| 24 | `bf12896e24494a728181606dd7dbc704` | Staff Permissions Management | `admin/PermissionsPage.tsx` |
+| 26 | `f736bf612c934514ba9ada7936f75b3a` | Mobile Check-In | `reception/CheckInPage.tsx` |
+| 28 | `68b38b7587514f23b72d713f8134abcb` | Inventory & Stock Control | `InventoryPage.tsx` |
+| 5 | `4c273cf1427d4fd4a999ab8410f5c925` | Inventory Forecasting | `inventory/InventoryForecastPage.tsx` |
+| 11 | `dec2b042d5ee4d50a3b920df5923480f` | Vendor & Supply Chain | `vendors/VendorPage.tsx` |
+| 17 | `2495c56e71204415afe6f568cabe0f7e` | Guest Folio & Checkout (v2) | `GuestFolioPage.tsx` |
+| 21 | `1da4a1ffc92b4c86b9794f6f55574391` | Table & Seat Management | `admin/TableManagementPage.tsx` |
+| 25 | `273b1837fb19440b83325793501695fb` | Inventory Audit & Adjustment | `InventoryPage.tsx` (Audit Tab) |
+| 27 | `ff72144b8e194c43a85e91ecb0679cdd` | Outlet Customization (Detailed) | `admin/TenantPage.tsx` (Detailed Tab) |
+| 29 | `58d9a27742d449dd9d0bc2c5d2823095` | Outlet Customization (Basic) | `admin/TenantPage.tsx` (Basic Tab) |
+| 30 | `e78c34d5c3594854b68226dc070a5e1b` | Resort Executive Analytics | `admin/ExecutiveAnalyticsPage.tsx` |
+
+### 🔴 The Gaps: Missing / Unimplemented (0 Screens)
+All identified screens from the Stitch project have been successfully mapped and implemented.
+
 
 ---
 

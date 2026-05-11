@@ -22,13 +22,14 @@ export interface User {
     firstName: string;
     lastName: string;
     role: Role;
+    hourlyRate: number;
     status: UserStatus;
     createdAt: string | Date;
     updatedAt: string | Date;
 }
 
 export interface AuthPayload {
-    userId: string;
+    id: string;
     tenantId: string;
     role: Role;
 }
@@ -149,7 +150,9 @@ export enum AdjustmentType {
     WASTE = 'WASTE',
     RESTOCK = 'RESTOCK',
     TRANSFER = 'TRANSFER',
-    CORRECTION = 'CORRECTION'
+    CORRECTION = 'CORRECTION',
+    PURCHASE = 'PURCHASE',
+    AUDIT = 'AUDIT'
 }
 
 export interface InventoryItem {
@@ -179,4 +182,112 @@ export interface TenantSettings {
     timezone: string;
     createdAt: string | Date;
     updatedAt: string | Date;
+}
+
+export interface ServiceRequest {
+    id: string;
+    tenantId: string;
+    roomNumber: string;
+    category: string;
+    description: string;
+    status: string;
+    createdAt: string | Date;
+    updatedAt: string | Date;
+}
+
+export interface Activity {
+    id: string;
+    tenantId: string;
+    name: string;
+    description: string;
+    duration: number;
+    price: number;
+    maxCapacity: number;
+    availableSlots: number;
+    imageUrl?: string;
+    createdAt: string | Date;
+    updatedAt: string | Date;
+}
+
+export interface ActivityBooking {
+    id: string;
+    tenantId: string;
+    activityId: string;
+    roomNumber: string;
+    guestName: string;
+    slotTime: string | Date;
+    status: string;
+    createdAt: string | Date;
+    updatedAt: string | Date;
+}
+
+export interface Shift {
+    id: string;
+    tenantId: string;
+    userId: string;
+    date: string | Date;
+    startTime: string | Date;
+    endTime: string | Date;
+    station: string;
+    createdAt: string | Date;
+}
+
+export type ClockEventType = 'IN' | 'OUT';
+
+export interface ClockEvent {
+    id: string;
+    tenantId: string;
+    userId: string;
+    type: ClockEventType;
+    timestamp: string | Date;
+    createdAt: string | Date;
+}
+
+// ── Vendors & Purchasing ───────────────────────────────────────────────────
+
+export interface Vendor {
+    id: string;
+    tenantId: string;
+    name: string;
+    contactName?: string;
+    email?: string;
+    phone?: string;
+    categories: string[];
+    createdAt: string | Date;
+    updatedAt: string | Date;
+}
+
+export interface PurchaseOrderItem {
+    id: string;
+    purchaseOrderId: string;
+    inventoryItemId: string;
+    orderedQty: number;
+    receivedQty?: number;
+    unitCost: number;
+    createdAt: string | Date;
+    inventoryItem?: InventoryItem;
+}
+
+export interface PurchaseOrder {
+    id: string;
+    tenantId: string;
+    vendorId: string;
+    status: 'DRAFT' | 'SENT' | 'RECEIVED';
+    totalCost: number;
+    createdAt: string | Date;
+    updatedAt: string | Date;
+    items?: PurchaseOrderItem[];
+    vendor?: Vendor;
+}
+
+export interface InventoryAuditLog {
+    id: string;
+    tenantId: string;
+    inventoryItemId: string;
+    previousQty: number;
+    newQty: number;
+    adjustmentType: AdjustmentType;
+    reason?: string;
+    userId?: string;
+    createdAt: string | Date;
 }

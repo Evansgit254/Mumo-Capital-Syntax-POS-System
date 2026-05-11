@@ -44,7 +44,7 @@ describe('authenticate middleware', () => {
         expect(nextFn).toHaveBeenCalledTimes(1);
         expect(nextFn).toHaveBeenCalledWith(); // no error arg
         expect(req.user).toBeDefined();
-        expect(req.user!.userId).toBe('user-1');
+        expect(req.user!.id).toBe('user-1');
         expect(req.user!.tenantId).toBe(tenantId);
         expect(req.user!.role).toBe(Role.STAFF);
     });

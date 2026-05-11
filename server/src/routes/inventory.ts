@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { notFound, badRequest } from '../lib/errors';
 import { validate } from '../middleware/validate';
@@ -27,10 +28,15 @@ router.get(
             });
 
             if (alert === 'true') {
-                items = items.filter(item => item.currentStock < item.minStock);
+                items = items.filter(item => item.currentStock.lt(item.minStock));
             }
 
-            res.json(items);
+            res.json(items.map(item => ({
+                ...item,
+                currentStock: item.currentStock.toNumber(),
+                minStock: item.minStock.toNumber(),
+                costPerUnit: item.costPerUnit.toNumber()
+            })));
         } catch (err) {
             next(err);
         }
@@ -48,7 +54,12 @@ router.get(
                 where: { id: req.params.id, tenantId },
             });
             if (!item) throw notFound('Inventory item not found');
-            res.json(item);
+            res.json({
+                ...item,
+                currentStock: item.currentStock.toNumber(),
+                minStock: item.minStock.toNumber(),
+                costPerUnit: item.costPerUnit.toNumber()
+            });
         } catch (err) {
             next(err);
         }
@@ -64,9 +75,20 @@ router.post(
         try {
             const { tenantId } = req.user!;
             const item = await prisma.inventoryItem.create({
-                data: { ...req.body, tenantId },
+                data: {
+                    ...req.body,
+                    tenantId,
+                    currentStock: new Prisma.Decimal(req.body.currentStock || 0),
+                    minStock: new Prisma.Decimal(req.body.minStock || 0),
+                    costPerUnit: new Prisma.Decimal(req.body.costPerUnit || 0),
+                },
             });
-            res.status(201).json(item);
+            res.status(201).json({
+                ...item,
+                currentStock: item.currentStock.toNumber(),
+                minStock: item.minStock.toNumber(),
+                costPerUnit: item.costPerUnit.toNumber()
+            });
         } catch (err) {
             next(err);
         }
@@ -89,9 +111,19 @@ router.put(
 
             const updated = await prisma.inventoryItem.update({
                 where: { id: req.params.id },
-                data: req.body,
+                data: {
+                    ...req.body,
+                    currentStock: req.body.currentStock !== undefined ? new Prisma.Decimal(req.body.currentStock) : undefined,
+                    minStock: req.body.minStock !== undefined ? new Prisma.Decimal(req.body.minStock) : undefined,
+                    costPerUnit: req.body.costPerUnit !== undefined ? new Prisma.Decimal(req.body.costPerUnit) : undefined,
+                },
             });
-            res.json(updated);
+            res.json({
+                ...updated,
+                currentStock: updated.currentStock.toNumber(),
+                minStock: updated.minStock.toNumber(),
+                costPerUnit: updated.costPerUnit.toNumber()
+            });
         } catch (err) {
             next(err);
         }
@@ -119,6 +151,45 @@ router.delete(
     }
 );
 
+// ── GET /api/inventory/audit-log ────────────────────────────────────────────
+router.get(
+    '/audit-log',
+    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
+    async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const { tenantId } = req.user!;
+            const { page = '1', limit = '10' } = req.query;
+            const skip = (Number(page) - 1) * Number(limit);
+
+            const logs = await prisma.inventoryAuditLog.findMany({
+                where: { tenantId },
+                orderBy: { createdAt: 'desc' },
+                take: Number(limit),
+                skip: skip,
+            });
+
+            const total = await prisma.inventoryAuditLog.count({
+                where: { tenantId },
+            });
+
+            res.json({
+                logs: logs.map(l => ({
+                    ...l,
+                    previousQty: l.previousQty.toNumber(),
+                    newQty: l.newQty.toNumber()
+                })),
+                pagination: {
+                    total,
+                    page: Number(page),
+                    limit: Number(limit),
+                },
+            });
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
 // ── POST /api/inventory/:id/adjust ──────────────────────────────────────────
 router.post(
     '/:id/adjust',
@@ -126,7 +197,7 @@ router.post(
     validate(adjustInventorySchema),
     async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const { tenantId } = req.user!;
+            const { tenantId, id: userId } = req.user!;
             const { adjustmentType, quantity, reason } = req.body;
 
             const item = await prisma.inventoryItem.findFirst({
@@ -134,32 +205,52 @@ router.post(
             });
             if (!item) throw notFound('Inventory item not found');
 
-            let newStock: number;
+            let newStock: Prisma.Decimal;
+            const quantityDecimal = new Prisma.Decimal(quantity);
+
             if (adjustmentType === AdjustmentType.WASTE || adjustmentType === AdjustmentType.TRANSFER) {
-                newStock = item.currentStock - quantity;
-                if (newStock < 0) {
+                newStock = item.currentStock.minus(quantityDecimal);
+                if (newStock.lt(0)) {
                     throw badRequest(
-                        `Insufficient stock. Current: ${item.currentStock}, Requested: ${quantity}`
+                        `Insufficient stock. Current: ${item.currentStock.toNumber()}, Requested: ${quantity}`
                     );
                 }
             } else {
-                // RESTOCK or CORRECTION
-                newStock = item.currentStock + quantity;
+                newStock = item.currentStock.plus(quantityDecimal);
             }
 
-            const updated = await prisma.inventoryItem.update({
-                where: { id: req.params.id },
-                data: { currentStock: newStock },
-            });
+            // Wrap in transaction to ensure audit log is always created
+            const [updated] = await prisma.$transaction([
+                prisma.inventoryItem.update({
+                    where: { id: req.params.id },
+                    data: { currentStock: newStock },
+                }),
+                prisma.inventoryAuditLog.create({
+                    data: {
+                        tenantId,
+                        inventoryItemId: req.params.id,
+                        previousQty: item.currentStock,
+                        newQty: newStock,
+                        adjustmentType,
+                        reason,
+                        userId,
+                    },
+                }),
+            ]);
 
             res.json({
-                item: updated,
+                item: {
+                    ...updated,
+                    currentStock: updated.currentStock.toNumber(),
+                    minStock: updated.minStock.toNumber(),
+                    costPerUnit: updated.costPerUnit.toNumber()
+                },
                 adjustment: {
                     type: adjustmentType,
                     quantity,
                     reason,
-                    previousStock: item.currentStock,
-                    newStock: updated.currentStock,
+                    previousStock: item.currentStock.toNumber(),
+                    newStock: updated.currentStock.toNumber(),
                 },
             });
         } catch (err) {

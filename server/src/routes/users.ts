@@ -1,10 +1,20 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
+import bcrypt from 'bcrypt';
 import { prisma } from '../lib/prisma';
 import { requireRole } from '../middleware/requireRole';
-import { forbidden, notFound } from '../lib/errors';
+import { validate } from '../middleware/validate';
+import { forbidden, notFound, badRequest } from '../lib/errors';
+import { 
+    createUserSchema, 
+    updateRoleSchema, 
+    updateStatusSchema, 
+    updateRateSchema 
+} from '../validators/users';
 import { Role } from '@mumo/types';
 
 const router = Router();
+const SALT_ROUNDS = 12;
 
 // ── GET /api/users ──────────────────────────────────────────────────────────
 // List all staff accounts for the authenticated tenant. ADMIN only.
@@ -23,13 +33,17 @@ router.get(
                     firstName: true,
                     lastName: true,
                     role: true,
+                    hourlyRate: true,
                     createdAt: true,
                     updatedAt: true,
                 },
                 orderBy: { createdAt: 'desc' },
             });
 
-            res.json(users);
+            res.json(users.map(u => ({
+                ...u,
+                hourlyRate: u.hourlyRate.toNumber()
+            })));
         } catch (err) {
             next(err);
         }
@@ -41,15 +55,11 @@ router.get(
 router.post(
     '/',
     requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN),
+    validate(createUserSchema),
     async (req: Request, res: Response, next: NextFunction) => {
         try {
             const { tenantId } = req.user!;
-            const { email, firstName, lastName, role, password } = req.body;
-
-            // Basic validation
-            if (!email || !firstName || !role) {
-                throw forbidden('Missing required fields (email, firstName, role)');
-            }
+            const { email, firstName, lastName, role, password, hourlyRate } = req.body;
 
             // Check if user already exists
             const existing = await prisma.user.findUnique({ where: { email } });
@@ -57,10 +67,7 @@ router.post(
                 throw forbidden('A user with this email already exists');
             }
 
-            // In a real app, we'd hash the password and send an invitation email.
-            // For this POS, we'll hash it and create the account immediately.
-            const bcrypt = require('bcryptjs');
-            const hashedPassword = await bcrypt.hash(password || 'Mumo1234!', 10);
+            const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
             const user = await prisma.user.create({
                 data: {
@@ -70,6 +77,7 @@ router.post(
                     role,
                     tenantId,
                     password: hashedPassword,
+                    hourlyRate: new Prisma.Decimal(hourlyRate || 0),
                 },
                 select: {
                     id: true,
@@ -77,11 +85,15 @@ router.post(
                     firstName: true,
                     lastName: true,
                     role: true,
+                    hourlyRate: true,
                     createdAt: true,
                 },
             });
 
-            res.status(201).json(user);
+            res.status(201).json({
+                ...user,
+                hourlyRate: user.hourlyRate.toNumber()
+            });
         } catch (err) {
             next(err);
         }
@@ -93,17 +105,12 @@ router.post(
 router.put(
     '/:id/role',
     requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN),
+    validate(updateRoleSchema),
     async (req: Request, res: Response, next: NextFunction) => {
         try {
             const { tenantId } = req.user!;
             const { id } = req.params;
             const { role } = req.body;
-
-            // Validate role
-            const validRoles = [Role.TENANT_ADMIN, Role.MANAGER, Role.STAFF];
-            if (!validRoles.includes(role)) {
-                throw notFound(`Invalid role: ${role}`);
-            }
 
             // Verify user belongs to this tenant
             const user = await prisma.user.findFirst({
@@ -124,12 +131,16 @@ router.put(
                     lastName: true,
                     role: true,
                     status: true,
+                    hourlyRate: true,
                     createdAt: true,
                     updatedAt: true,
                 },
             });
 
-            res.json(updated);
+            res.json({
+                ...updated,
+                hourlyRate: updated.hourlyRate.toNumber()
+            });
         } catch (err) {
             next(err);
         }
@@ -142,15 +153,12 @@ router.put(
 router.put(
     '/:id/status',
     requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN),
+    validate(updateStatusSchema),
     async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const { tenantId, userId: currentUserId } = req.user!;
+            const { tenantId, id: currentUserId } = req.user!;
             const { id } = req.params;
             const { status } = req.body;
-
-            if (!['ACTIVE', 'INACTIVE'].includes(status)) {
-                throw notFound(`Invalid status: ${status}`);
-            }
 
             // Prevent self-deactivation
             if (id === currentUserId && status === 'INACTIVE') {
@@ -176,12 +184,63 @@ router.put(
                     lastName: true,
                     role: true,
                     status: true,
+                    hourlyRate: true,
                     createdAt: true,
                     updatedAt: true,
                 },
             });
 
-            res.json(updated);
+            res.json({
+                ...updated,
+                hourlyRate: updated.hourlyRate.toNumber()
+            });
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+// ── PUT /api/users/:id/rate ─────────────────────────────────────────────────
+// Update a user's hourly rate. ADMIN only.
+router.put(
+    '/:id/rate',
+    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN),
+    validate(updateRateSchema),
+    async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const { tenantId } = req.user!;
+            const { id } = req.params;
+            const { hourlyRate } = req.body;
+
+            // Verify user belongs to this tenant
+            const user = await prisma.user.findFirst({
+                where: { id, tenantId },
+            });
+
+            if (!user) {
+                throw notFound('User not found in this tenant');
+            }
+
+            const updated = await prisma.user.update({
+                where: { id },
+                data: { hourlyRate: new Prisma.Decimal(hourlyRate) },
+                select: {
+                    id: true,
+                    email: true,
+                    firstName: true,
+                    lastName: true,
+                    role: true,
+                    hourlyRate: true,
+                    status: true,
+                    createdAt: true,
+                    updatedAt: true,
+                },
+            });
+
+            res.json({
+                ...updated,
+                hourlyRate: updated.hourlyRate.toNumber()
+            });
         } catch (err) {
             next(err);
         }

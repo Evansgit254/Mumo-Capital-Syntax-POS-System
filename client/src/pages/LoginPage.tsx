@@ -22,14 +22,14 @@ export default function LoginPage() {
         try {
             const res = await axios.post(
                 `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/auth/login`,
-                { email, password }
+                { email, password },
+                { withCredentials: true } // FIX 11: Accept httpOnly cookie from server
             );
             
-            const { accessToken, refreshToken, user } = res.data;
+            const { accessToken, user } = res.data;
             
             setSession({
                 token: accessToken,
-                refreshToken,
                 tenantId: user.tenantId,
                 tenantName: user.tenantName,
                 role: user.role,

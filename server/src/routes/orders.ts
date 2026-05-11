@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { notFound, badRequest } from '../lib/errors';
 import { validate } from '../middleware/validate';
@@ -33,11 +34,14 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
                 menuItemId: item.menuItemId,
                 quantity: item.quantity,
                 unitPrice,
-                subtotal: unitPrice * item.quantity,
+                subtotal: unitPrice.times(item.quantity),
             };
         });
 
-        const totalAmount = orderItems.reduce((sum: number, oi: any) => sum + oi.subtotal, 0);
+        const totalAmount = orderItems.reduce(
+            (sum: Prisma.Decimal, oi: any) => sum.plus(oi.subtotal),
+            new Prisma.Decimal(0)
+        );
 
         const order = await prisma.order.create({
             data: {
@@ -50,7 +54,17 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
             include: { items: true },
         });
 
-        res.status(201).json(order);
+        const serialized = {
+            ...order,
+            totalAmount: order.totalAmount.toNumber(),
+            items: order.items.map(item => ({
+                ...item,
+                unitPrice: item.unitPrice.toNumber(),
+                subtotal: item.subtotal.toNumber()
+            }))
+        };
+
+        res.status(201).json(serialized);
     } catch (err) {
         next(err);
     }
@@ -71,7 +85,22 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
             },
             orderBy: { createdAt: 'desc' },
         });
-        res.json(orders);
+
+        const serialized = orders.map(order => ({
+            ...order,
+            totalAmount: order.totalAmount.toNumber(),
+            items: order.items.map(item => ({
+                ...item,
+                unitPrice: item.unitPrice.toNumber(),
+                subtotal: item.subtotal.toNumber()
+            })),
+            payments: order.payments.map(p => ({
+                ...p,
+                amount: p.amount.toNumber()
+            }))
+        }));
+
+        res.json(serialized);
     } catch (err) {
         next(err);
     }
@@ -100,7 +129,18 @@ router.get('/live', async (req: Request, res: Response, next: NextFunction) => {
             },
             orderBy: { createdAt: 'asc' },
         });
-        res.json(orders);
+
+        const serialized = orders.map(order => ({
+            ...order,
+            totalAmount: order.totalAmount.toNumber(),
+            items: order.items.map(item => ({
+                ...item,
+                unitPrice: item.unitPrice.toNumber(),
+                subtotal: item.subtotal.toNumber()
+            }))
+        }));
+
+        res.json(serialized);
     } catch (err) {
         next(err);
     }
@@ -120,7 +160,26 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
             },
         });
         if (!order) throw notFound('Order not found');
-        res.json(order);
+
+        const serialized = {
+            ...order,
+            totalAmount: order.totalAmount.toNumber(),
+            items: order.items.map(item => ({
+                ...item,
+                unitPrice: item.unitPrice.toNumber(),
+                subtotal: item.subtotal.toNumber(),
+                menuItem: item.menuItem ? {
+                    ...item.menuItem,
+                    price: item.menuItem.price.toNumber()
+                } : undefined
+            })),
+            payments: order.payments.map(p => ({
+                ...p,
+                amount: p.amount.toNumber()
+            }))
+        };
+
+        res.json(serialized);
     } catch (err) {
         next(err);
     }
@@ -132,7 +191,7 @@ router.post(
     validate(createOrderSchema),
     async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const { tenantId, userId } = req.user!;
+            const { tenantId, id: userId } = req.user!;
             const { tableId, items } = req.body;
 
             // Validate table belongs to tenant if provided
@@ -162,13 +221,13 @@ router.post(
                     menuItemId: item.menuItemId,
                     quantity: item.quantity,
                     unitPrice,
-                    subtotal: unitPrice * item.quantity,
+                    subtotal: unitPrice.times(item.quantity),
                 };
             });
 
             const totalAmount = orderItems.reduce(
-                (sum: number, oi: { subtotal: number }) => sum + oi.subtotal,
-                0
+                (sum: Prisma.Decimal, oi: any) => sum.plus(oi.subtotal),
+                new Prisma.Decimal(0)
             );
 
             const order = await prisma.order.create({
@@ -183,7 +242,17 @@ router.post(
                 include: { items: true },
             });
 
-            res.status(201).json(order);
+            const serialized = {
+                ...order,
+                totalAmount: order.totalAmount.toNumber(),
+                items: order.items.map(item => ({
+                    ...item,
+                    unitPrice: item.unitPrice.toNumber(),
+                    subtotal: item.subtotal.toNumber()
+                }))
+            };
+
+            res.status(201).json(serialized);
         } catch (err) {
             next(err);
         }
@@ -209,7 +278,18 @@ router.put(
                 data: { status: req.body.status },
                 include: { items: true },
             });
-            res.json(updated);
+
+            const serialized = {
+                ...updated,
+                totalAmount: updated.totalAmount.toNumber(),
+                items: updated.items.map(item => ({
+                    ...item,
+                    unitPrice: item.unitPrice.toNumber(),
+                    subtotal: item.subtotal.toNumber()
+                }))
+            };
+
+            res.json(serialized);
         } catch (err) {
             next(err);
         }

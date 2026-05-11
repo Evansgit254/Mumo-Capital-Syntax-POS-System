@@ -1,0 +1,10 @@
+-- AlterTable
+ALTER TABLE "Table" ADD COLUMN     "shape" TEXT NOT NULL DEFAULT 'SQUARE',
+ADD COLUMN     "x" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "y" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "zone" TEXT NOT NULL DEFAULT 'Indoor';
+
+-- AlterTable
+ALTER TABLE "TenantSettings" ADD COLUMN     "operatingHours" JSONB,
+ADD COLUMN     "outletType" TEXT DEFAULT 'RESTAURANT',
+ADD COLUMN     "receiptConfig" JSONB;

@@ -3,8 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import { Role, OrderItem } from '@mumo/types';
 
 interface Session {
-    token: string | null;
-    refreshToken: string | null;
+    token: string | null;       // Access token — memory only, never persisted
     tenantId: string | null;
     tenantName: string | null;
     role: Role | null;
@@ -25,7 +24,7 @@ interface HardwareSettings {
 }
 
 interface StoreState {
-    // Session Slice
+    // Session Slice (memory-only, NOT persisted)
     session: Session;
     setSession: (session: Partial<Session>) => void;
     clearSession: () => void;
@@ -60,36 +59,28 @@ interface StoreState {
     };
 }
 
+const defaultSession: Session = {
+    token: null,
+    tenantId: null,
+    tenantName: null,
+    role: null,
+    userId: null,
+    email: null,
+    firstName: null,
+};
+
 export const useStore = create<StoreState>()(
     persist(
         (set) => ({
-            // Session
-            session: {
-                token: null,
-                refreshToken: null,
-                tenantId: null,
-                tenantName: null,
-                role: null,
-                userId: null,
-                email: null,
-                firstName: null,
-            },
+            // Session (memory-only — FIX 11: NOT included in partialize)
+            session: { ...defaultSession },
             setSession: (updates) =>
                 set((state) => ({
                     session: { ...state.session, ...updates },
                 })),
             clearSession: () =>
                 set({
-                    session: {
-                        token: null,
-                        refreshToken: null,
-                        tenantId: null,
-                        tenantName: null,
-                        role: null,
-                        userId: null,
-                        email: null,
-                        firstName: null,
-                    },
+                    session: { ...defaultSession },
                 }),
 
             // Guest
@@ -197,8 +188,10 @@ export const useStore = create<StoreState>()(
         {
             name: 'mumo-pos-storage',
             storage: createJSONStorage(() => localStorage),
+            // FIX 11 — WARN-018: Only persist hardware + UI preferences.
+            // Session (access token) is NEVER persisted — it lives in memory only.
+            // Refresh token lives in an httpOnly cookie set by the server.
             partialize: (state) => ({
-                session: state.session,
                 hardware: state.hardware,
                 ui: { sidebarOpen: state.ui.sidebarOpen, primaryColor: state.ui.primaryColor },
             }),

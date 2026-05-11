@@ -3,14 +3,51 @@ import { AuthPayload, Role } from '@mumo/types';
 import { verifyAccessToken } from '../lib/jwt';
 import { unauthorized, forbidden, AppError } from '../lib/errors';
 
+// ── Public Request Context ───────────────────────────────────────────────────
+// FIX 7 — CRITICAL-009: Separate type for public routes.
+// Never overlaps with AuthPayload — public routes cannot pass role checks.
+export interface PublicRequestContext {
+    tenantId: string;
+    isPublic: true;
+}
+
 // ── Augment Express Request ──────────────────────────────────────────────────
 declare global {
     namespace Express {
         interface Request {
             user?: AuthPayload;
+            publicContext?: PublicRequestContext;
         }
     }
 }
+
+/**
+ * Helper: get tenantId from either authenticated user or public context.
+ * Use this in route handlers that serve both public and protected paths.
+ */
+export function getTenantId(req: Request): string {
+    if (req.user) return req.user.tenantId;
+    if (req.publicContext) return req.publicContext.tenantId;
+    throw forbidden('No tenant context available');
+}
+
+/**
+ * Public tenant extraction middleware.
+ * Use for guest-facing routes that don't require JWT auth.
+ *
+ * FIX 7 — CRITICAL-009: Sets req.publicContext instead of req.user.
+ * Does NOT fake a STAFF role. Does NOT set req.user at all.
+ */
+export const extractTenant = (req: Request, _res: Response, next: NextFunction) => {
+    const headerTenantId = req.headers['x-tenant-id'] as string | undefined;
+
+    if (!headerTenantId) {
+        return next(forbidden('Missing x-tenant-id header'));
+    }
+
+    req.publicContext = { tenantId: headerTenantId, isPublic: true };
+    next();
+};
 
 /**
  * Authentication middleware.
@@ -27,22 +64,6 @@ declare global {
  * - Missing x-tenant-id header → 403
  * - x-tenant-id mismatch with JWT → 403
  */
-/**
- * Public tenant extraction middleware.
- * Use for guest-facing routes that don't require JWT auth.
- */
-export const extractTenant = (req: Request, _res: Response, next: NextFunction) => {
-    const headerTenantId = req.headers['x-tenant-id'] as string | undefined;
-
-    if (!headerTenantId) {
-        return next(forbidden('Missing x-tenant-id header'));
-    }
-    
-    // For convenience, attach a partial user object
-    req.user = { tenantId: headerTenantId, userId: 'guest', role: Role.STAFF } as any;
-    next();
-};
-
 export const authenticate = (req: Request, _res: Response, next: NextFunction) => {
 
     try {

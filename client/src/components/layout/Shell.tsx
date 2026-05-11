@@ -18,7 +18,12 @@ import {
     Building2,
     Settings,
     Package,
-    Heart
+    Heart,
+    TrendingUp,
+    Truck,
+    Users,
+    Layout,
+    LayoutPanelLeft
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -34,12 +39,17 @@ const NAV_ITEMS = [
     { name: 'KDS', path: '/kds', icon: ChefHat },
     { name: 'Reservations', path: '/reservations', icon: Calendar },
     { name: 'Inventory', path: '/inventory', icon: Package, roles: ['TENANT_ADMIN', 'MANAGER'] },
+    { name: 'Forecasting', path: '/inventory/forecast', icon: TrendingUp, roles: ['TENANT_ADMIN', 'MANAGER'] },
+    { name: 'Vendors', path: '/vendors', icon: Truck, roles: ['TENANT_ADMIN', 'MANAGER'] },
+    { name: 'Workforce', path: '/admin/workforce', icon: Users, roles: ['TENANT_ADMIN', 'MANAGER'] },
     { name: 'Loyalty', path: '/loyalty', icon: Heart, roles: ['TENANT_ADMIN', 'MANAGER'] },
     { name: 'Menu', path: '/menu', icon: UtensilsCrossed, roles: ['TENANT_ADMIN', 'MANAGER'] },
     { name: 'Reports', path: '/reports', icon: BarChart3 },
     { name: 'Settings', path: '/settings', icon: Settings },
     { name: 'Permissions', path: '/admin/permissions', icon: Shield, roles: ['TENANT_ADMIN'], separator: true },
     { name: 'Tenant', path: '/admin/tenant', icon: Building2, roles: ['TENANT_ADMIN'] },
+    { name: 'Floor Plan', path: '/admin/tables', icon: Layout, roles: ['TENANT_ADMIN'] },
+    { name: 'Executive Insights', path: '/admin/analytics', icon: LayoutPanelLeft, roles: ['TENANT_ADMIN'] },
 ];
 
 export default function Shell() {
@@ -148,7 +158,7 @@ export default function Shell() {
                         )}
                     >
                         <LogOut size={20} className="shrink-0" />
-                        {sidebarOpen && <span className="font-semibold text-sm uppercase tracking-wider">Sign Out</span>}
+                        {sidebarOpen && <span className="label-sm font-bold tracking-widest">Sign Out</span>}
                     </button>
                     
                     <button 

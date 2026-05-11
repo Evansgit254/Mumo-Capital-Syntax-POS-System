@@ -15,6 +15,7 @@ import {
     Save,
     Check,
     X,
+    Loader2
 } from 'lucide-react';
 
 const TIMEZONES = [
@@ -37,7 +38,26 @@ const DEFAULT_SETTINGS = {
     currency: 'KES',
     timezone: 'Africa/Nairobi',
     taxRate: 16.0,
+    outletType: 'RESTAURANT',
+    operatingHours: {
+        Mon: { open: '08:00', close: '22:00' },
+        Tue: { open: '08:00', close: '22:00' },
+        Wed: { open: '08:00', close: '22:00' },
+        Thu: { open: '08:00', close: '22:00' },
+        Fri: { open: '08:00', close: '23:00' },
+        Sat: { open: '09:00', close: '23:00' },
+        Sun: { open: '09:00', close: '21:00' }
+    },
+    receiptConfig: {
+        header: 'Welcome to Mumo POS',
+        footer: 'Thank you for your visit!',
+        showTax: true,
+        showLogo: true
+    }
 };
+
+const OUTLET_TYPES = ['RESTAURANT', 'BAR', 'CAFE', 'ROOM_SERVICE', 'POOL_BAR'];
+const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 export default function TenantPage() {
     const { session, ui } = useStore();
@@ -48,6 +68,7 @@ export default function TenantPage() {
     const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
     const [showResetModal, setShowResetModal] = useState(false);
     const [dirty, setDirty] = useState(false);
+    const [activeTab, setActiveTab] = useState<'BASIC' | 'DETAILED'>('BASIC');
 
     const showToast = (message: string, type: 'success' | 'error') => {
         setToast({ message, type });
@@ -59,7 +80,6 @@ export default function TenantPage() {
         queryFn: tenantService.getSettings,
     });
 
-    // Populate form from server data
     useEffect(() => {
         if (settingsQuery.data) {
             const d = settingsQuery.data;
@@ -70,6 +90,9 @@ export default function TenantPage() {
                 currency: d.currency || 'KES',
                 timezone: d.timezone || 'Africa/Nairobi',
                 taxRate: d.taxRate ?? 16.0,
+                outletType: d.outletType || 'RESTAURANT',
+                operatingHours: d.operatingHours || DEFAULT_SETTINGS.operatingHours,
+                receiptConfig: d.receiptConfig || DEFAULT_SETTINGS.receiptConfig,
             });
         }
     }, [settingsQuery.data, session.tenantName]);
@@ -96,13 +119,11 @@ export default function TenantPage() {
             await queryClient.cancelQueries({ queryKey: ['tenant-settings'] });
             const previous = queryClient.getQueryData(['tenant-settings']);
             queryClient.setQueryData(['tenant-settings'], (old: any) => ({ ...old, ...data }));
-            // Live-update the CSS variable for primary color
             applyPrimaryColor(data.primaryColor);
             return { previous };
         },
         onError: (err, _vars, context) => {
             queryClient.setQueryData(['tenant-settings'], context?.previous);
-            // Rollback color
             if (context?.previous) {
                 applyPrimaryColor((context.previous as any).primaryColor || '#008B8B');
             }
@@ -137,7 +158,6 @@ export default function TenantPage() {
     const handleColorChange = (color: string) => {
         setForm(f => ({ ...f, primaryColor: color }));
         setDirty(true);
-        // Live preview
         if (/^#[0-9a-fA-F]{6}$/.test(color)) {
             applyPrimaryColor(color);
         }
@@ -155,9 +175,10 @@ export default function TenantPage() {
         if (errors[key]) setErrors(e => ({ ...e, [key]: '' }));
     };
 
+    const cn = (...inputs: any[]) => inputs.filter(Boolean).join(' ');
+
     return (
         <div className="p-6 tablet:p-10 space-y-8 max-w-3xl">
-            {/* Toast */}
             {toast && (
                 <div
                     className={`fixed top-6 right-6 z-[100] px-5 py-3 rounded-xl font-semibold text-sm shadow-2xl transition-all ${
@@ -170,7 +191,6 @@ export default function TenantPage() {
                 </div>
             )}
 
-            {/* Header */}
             <div className="flex flex-col gap-1">
                 <h1 className="display-lg text-on-surface flex items-center gap-4">
                     <div className="h-12 w-12 rounded-xl bg-secondary/10 flex items-center justify-center">
@@ -185,257 +205,226 @@ export default function TenantPage() {
 
             {settingsQuery.isLoading ? (
                 <div className="space-y-6">
-                    {Array(5)
-                        .fill(0)
-                        .map((_, i) => (
-                            <div
-                                key={i}
-                                className="h-[72px] rounded-xl bg-surface-container-low animate-pulse"
-                            />
-                        ))}
+                    {Array(5).fill(0).map((_, i) => (
+                        <div key={i} className="h-[72px] rounded-xl bg-surface-container-low animate-pulse" />
+                    ))}
                 </div>
             ) : (
-                <form onSubmit={handleSubmit} className="space-y-10">
-                    {/* Identity Section */}
-                    <section className="space-y-6">
-                        <h2 className="headline-md text-on-surface flex items-center gap-3">
-                            <Building2 size={20} className="text-on-surface-variant" />
-                            Identity
-                        </h2>
-
-                        <FormField label="Display Name" error={errors.displayName}>
-                            <input
-                                id="tenant-display-name"
-                                type="text"
-                                value={form.displayName}
-                                onChange={e => updateField('displayName', e.target.value)}
-                                placeholder="My Restaurant"
-                                className="input-field"
-                            />
-                        </FormField>
-
-                        <FormField
-                            label="Logo URL"
-                            error={errors.logoUrl}
-                            helpText="Provide a direct link to your logo image"
+                <form onSubmit={handleSubmit} className="space-y-8">
+                    <div className="flex gap-1 bg-surface-container rounded-2xl p-1 border border-outline-variant/30">
+                        <button 
+                            type="button"
+                            onClick={() => setActiveTab('BASIC')}
+                            className={cn(
+                                "flex-1 h-12 rounded-xl text-xs font-bold uppercase tracking-widest transition-all",
+                                activeTab === 'BASIC' ? "bg-secondary text-white shadow-lg" : "text-on-surface-variant hover:text-on-surface hover:bg-white/5"
+                            )}
                         >
-                            <div className="flex gap-3 items-start">
-                                <div className="flex-1">
-                                    <div className="relative">
-                                        <Image
-                                            size={18}
-                                            className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant"
+                            Basic Configuration
+                        </button>
+                        <button 
+                            type="button"
+                            onClick={() => setActiveTab('DETAILED')}
+                            className={cn(
+                                "flex-1 h-12 rounded-xl text-xs font-bold uppercase tracking-widest transition-all",
+                                activeTab === 'DETAILED' ? "bg-secondary text-white shadow-lg" : "text-on-surface-variant hover:text-on-surface hover:bg-white/5"
+                            )}
+                        >
+                            Detailed Customization
+                        </button>
+                    </div>
+
+                    {activeTab === 'BASIC' ? (
+                        <section className="space-y-8 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <section className="space-y-6">
+                                <h2 className="headline-md text-on-surface flex items-center gap-3 border-b border-outline-variant/20 pb-4">
+                                    <Building2 size={20} className="text-secondary" /> Organization Identity
+                                </h2>
+                                <div className="grid grid-cols-1 tablet:grid-cols-2 gap-6">
+                                    <FormField label="Outlet Name" error={errors.displayName}>
+                                        <input 
+                                            value={form.displayName} 
+                                            onChange={e => updateField('displayName', e.target.value)} 
+                                            className="input-field" 
                                         />
-                                        <input
-                                            id="tenant-logo-url"
-                                            type="text"
-                                            value={form.logoUrl}
-                                            onChange={e => updateField('logoUrl', e.target.value)}
-                                            placeholder="https://example.com/logo.png"
-                                            className="input-field !pl-11"
+                                    </FormField>
+                                    <FormField label="Outlet Type">
+                                        <select 
+                                            value={form.outletType} 
+                                            onChange={e => updateField('outletType', e.target.value)} 
+                                            className="input-field uppercase tracking-wider font-bold"
+                                        >
+                                            {OUTLET_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                        </select>
+                                    </FormField>
+                                </div>
+                                <FormField label="Logo Reference URL" error={errors.logoUrl}>
+                                    <input 
+                                        value={form.logoUrl} 
+                                        onChange={e => updateField('logoUrl', e.target.value)} 
+                                        className="input-field" 
+                                        placeholder="https://brand.mumo.pos/logo.png"
+                                    />
+                                </FormField>
+                            </section>
+
+                            <section className="space-y-6">
+                                <h2 className="headline-md text-on-surface flex items-center gap-3 border-b border-outline-variant/20 pb-4">
+                                    <Palette size={20} className="text-secondary" /> Brand Aesthetic
+                                </h2>
+                                <FormField label="Primary Accent Color" error={errors.primaryColor}>
+                                    <div className="flex gap-4 items-center">
+                                        <input 
+                                            type="color" 
+                                            value={form.primaryColor} 
+                                            onChange={e => handleColorChange(e.target.value)} 
+                                            className="h-16 w-16 rounded-2xl cursor-pointer bg-transparent border-2 border-outline-variant p-1 shadow-sm" 
+                                        />
+                                        <input 
+                                            type="text" 
+                                            value={form.primaryColor} 
+                                            onChange={e => handleColorChange(e.target.value)} 
+                                            className="input-field flex-1 font-mono uppercase" 
                                         />
                                     </div>
+                                </FormField>
+                            </section>
+
+                            <section className="space-y-6">
+                                <h2 className="headline-md text-on-surface flex items-center gap-3 border-b border-outline-variant/20 pb-4">
+                                    <Globe size={20} className="text-secondary" /> Regional & Financial
+                                </h2>
+                                <div className="grid grid-cols-1 tablet:grid-cols-3 gap-6">
+                                    <FormField label="Currency" error={errors.currency}>
+                                        <input value={form.currency} onChange={e => updateField('currency', e.target.value)} className="input-field" />
+                                    </FormField>
+                                    <FormField label="Tax Rate %" error={errors.taxRate}>
+                                        <input type="number" value={form.taxRate} onChange={e => updateField('taxRate', parseFloat(e.target.value))} className="input-field" />
+                                    </FormField>
+                                    <FormField label="System Timezone">
+                                        <select value={form.timezone} onChange={e => updateField('timezone', e.target.value)} className="input-field text-sm">
+                                            {TIMEZONES.map(tz => <option key={tz} value={tz}>{tz}</option>)}
+                                        </select>
+                                    </FormField>
                                 </div>
-                                {form.logoUrl && /^https?:\/\/.+/i.test(form.logoUrl) && (
-                                    <div className="h-14 w-14 rounded-xl border border-outline-variant overflow-hidden shrink-0 bg-surface-container">
-                                        <img
-                                            src={form.logoUrl}
-                                            alt="Logo preview"
-                                            className="h-full w-full object-contain"
-                                            onError={e => {
-                                                (e.target as HTMLImageElement).style.display = 'none';
-                                            }}
+                            </section>
+                        </section>
+                    ) : (
+                        <section className="space-y-10 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                            <section className="space-y-6">
+                                <h2 className="headline-md text-on-surface flex items-center gap-3 border-b border-outline-variant/20 pb-4">
+                                    <RotateCcw size={20} className="text-secondary" /> Operating Schedule
+                                </h2>
+                                <div className="card-default p-6 space-y-4">
+                                    {DAYS.map(day => (
+                                        <div key={day} className="flex items-center justify-between py-2 border-b border-outline-variant last:border-0">
+                                            <span className="body-md font-black w-24">{day}</span>
+                                            <div className="flex gap-4 items-center">
+                                                <input 
+                                                    type="time" 
+                                                    value={(form.operatingHours as any)[day]?.open} 
+                                                    onChange={e => updateField('operatingHours', { ...form.operatingHours, [day]: { ...(form.operatingHours as any)[day], open: e.target.value } })}
+                                                    className="h-10 px-4 bg-surface-container rounded-lg border border-outline-variant text-sm font-bold"
+                                                />
+                                                <span className="text-on-surface-variant text-xs font-bold">—</span>
+                                                <input 
+                                                    type="time" 
+                                                    value={(form.operatingHours as any)[day]?.close} 
+                                                    onChange={e => updateField('operatingHours', { ...form.operatingHours, [day]: { ...(form.operatingHours as any)[day], close: e.target.value } })}
+                                                    className="h-10 px-4 bg-surface-container rounded-lg border border-outline-variant text-sm font-bold"
+                                                />
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </section>
+
+                            <section className="space-y-6">
+                                <h2 className="headline-md text-on-surface flex items-center gap-3 border-b border-outline-variant/20 pb-4">
+                                    <Image size={20} className="text-secondary" /> Digital Receipt Branding
+                                </h2>
+                                <div className="space-y-6">
+                                    <FormField label="Receipt Header Text">
+                                        <textarea 
+                                            value={(form.receiptConfig as any).header}
+                                            onChange={e => updateField('receiptConfig', { ...form.receiptConfig, header: e.target.value })}
+                                            className="input-field h-24"
                                         />
+                                    </FormField>
+                                    <FormField label="Receipt Footer Text">
+                                        <textarea 
+                                            value={(form.receiptConfig as any).footer}
+                                            onChange={e => updateField('receiptConfig', { ...form.receiptConfig, footer: e.target.value })}
+                                            className="input-field h-24"
+                                        />
+                                    </FormField>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <label className="flex items-center gap-4 p-4 card-default cursor-pointer group">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={(form.receiptConfig as any).showTax}
+                                                onChange={e => updateField('receiptConfig', { ...form.receiptConfig, showTax: e.target.checked })}
+                                                className="h-6 w-6 rounded border-outline-variant checked:bg-secondary"
+                                            />
+                                            <span className="body-md font-bold group-hover:text-secondary transition-colors">Itemized Tax Breakdown</span>
+                                        </label>
+                                        <label className="flex items-center gap-4 p-4 card-default cursor-pointer group">
+                                            <input 
+                                                type="checkbox" 
+                                                checked={(form.receiptConfig as any).showLogo}
+                                                onChange={e => updateField('receiptConfig', { ...form.receiptConfig, showLogo: e.target.checked })}
+                                                className="h-6 w-6 rounded border-outline-variant checked:bg-secondary"
+                                            />
+                                            <span className="body-md font-bold group-hover:text-secondary transition-colors">Digital Logo Header</span>
+                                        </label>
                                     </div>
-                                )}
-                            </div>
-                        </FormField>
-                    </section>
-
-                    {/* Branding Section */}
-                    <section className="space-y-6">
-                        <h2 className="headline-md text-on-surface flex items-center gap-3">
-                            <Palette size={20} className="text-on-surface-variant" />
-                            Branding
-                        </h2>
-
-                        <FormField
-                            label="Primary Color"
-                            error={errors.primaryColor}
-                            helpText="This color is applied to the sidebar and accent elements in real-time"
-                        >
-                            <div className="flex gap-3 items-center">
-                                <input
-                                    id="tenant-primary-color-picker"
-                                    type="color"
-                                    value={form.primaryColor}
-                                    onChange={e => handleColorChange(e.target.value)}
-                                    className="h-14 w-14 rounded-xl border-2 border-outline-variant cursor-pointer bg-transparent"
-                                />
-                                <input
-                                    id="tenant-primary-color-hex"
-                                    type="text"
-                                    value={form.primaryColor}
-                                    onChange={e => handleColorChange(e.target.value)}
-                                    placeholder="#008B8B"
-                                    className="input-field flex-1 font-mono"
-                                    maxLength={7}
-                                />
-                                <div
-                                    className="h-14 w-24 rounded-xl border border-outline-variant"
-                                    style={{ backgroundColor: form.primaryColor }}
-                                />
-                            </div>
-                        </FormField>
-                    </section>
-
-                    {/* Financial Section */}
-                    <section className="space-y-6">
-                        <h2 className="headline-md text-on-surface flex items-center gap-3">
-                            <DollarSign size={20} className="text-on-surface-variant" />
-                            Financial
-                        </h2>
-
-                        <div className="grid grid-cols-1 tablet:grid-cols-2 gap-6">
-                            <FormField label="Currency Symbol" error={errors.currency}>
-                                <div className="relative">
-                                    <DollarSign
-                                        size={18}
-                                        className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant"
-                                    />
-                                    <input
-                                        id="tenant-currency"
-                                        type="text"
-                                        value={form.currency}
-                                        onChange={e => updateField('currency', e.target.value)}
-                                        placeholder="KES"
-                                        className="input-field !pl-11"
-                                        maxLength={5}
-                                    />
                                 </div>
-                            </FormField>
+                            </section>
+                        </section>
+                    )}
 
-                            <FormField label="Tax Rate (%)" error={errors.taxRate}>
-                                <div className="relative">
-                                    <Percent
-                                        size={18}
-                                        className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant"
-                                    />
-                                    <input
-                                        id="tenant-tax-rate"
-                                        type="number"
-                                        value={form.taxRate}
-                                        onChange={e =>
-                                            updateField('taxRate', parseFloat(e.target.value) || 0)
-                                        }
-                                        placeholder="16.0"
-                                        className="input-field !pl-11"
-                                        min={0}
-                                        max={100}
-                                        step={0.1}
-                                    />
-                                </div>
-                            </FormField>
-                        </div>
-                    </section>
-
-                    {/* Locale Section */}
-                    <section className="space-y-6">
-                        <h2 className="headline-md text-on-surface flex items-center gap-3">
-                            <Globe size={20} className="text-on-surface-variant" />
-                            Locale
-                        </h2>
-
-                        <FormField label="Timezone">
-                            <select
-                                id="tenant-timezone"
-                                value={form.timezone}
-                                onChange={e => updateField('timezone', e.target.value)}
-                                className="input-field cursor-pointer"
-                            >
-                                {TIMEZONES.map(tz => (
-                                    <option key={tz} value={tz}>
-                                        {tz}
-                                    </option>
-                                ))}
-                            </select>
-                        </FormField>
-                    </section>
-
-                    {/* Save */}
-                    <div className="flex gap-4 pt-4">
+                    <div className="flex gap-4 pt-8 sticky bottom-0 bg-surface/90 backdrop-blur-md pb-4 border-t border-outline-variant/30 mt-8 z-10">
                         <button
                             type="submit"
                             disabled={!dirty || saveMutation.isPending}
-                            className="btn-primary"
-                            id="save-tenant-settings"
+                            className="btn-primary h-14 px-10 shadow-xl shadow-secondary/20"
                         >
-                            {saveMutation.isPending ? (
-                                <span className="animate-spin">⏳</span>
-                            ) : (
-                                <Save size={20} />
-                            )}
-                            Save Changes
+                            {saveMutation.isPending ? <Loader2 className="animate-spin" size={20} /> : <Save size={20} />}
+                            Settle Final Settings
                         </button>
                     </div>
                 </form>
             )}
 
-            {/* Danger Zone */}
             <div className="card-default !border-red-500/30 !bg-red-500/5 p-6 space-y-4">
                 <div className="flex items-center gap-3">
                     <AlertTriangle size={20} className="text-red-400" />
                     <h3 className="body-md font-bold text-red-400">Danger Zone</h3>
                 </div>
-                <p className="text-sm text-on-surface-variant">
-                    Resetting will revert all tenant settings (display name, logo, color, currency,
-                    tax rate, timezone) back to factory defaults. This cannot be undone.
-                </p>
                 <button
                     onClick={() => setShowResetModal(true)}
                     className="h-10 px-6 rounded-lg text-sm font-bold text-red-400 border border-red-500/30 hover:bg-red-500/10 transition-colors flex items-center gap-2"
-                    id="reset-settings-btn"
                 >
                     <RotateCcw size={16} />
                     Reset All Settings
                 </button>
             </div>
 
-            {/* Reset Confirmation Modal */}
             {showResetModal && (
                 <div className="fixed inset-0 z-[200] flex items-center justify-center bg-black/60 backdrop-blur-sm">
                     <div className="card-default max-w-md w-full mx-4 p-8 space-y-6 !border-red-500/30">
                         <div className="flex items-center gap-3">
-                            <div className="h-12 w-12 rounded-full bg-red-500/10 flex items-center justify-center">
-                                <AlertTriangle size={24} className="text-red-400" />
-                            </div>
-                            <div>
-                                <h3 className="headline-md text-on-surface">Confirm Reset</h3>
-                                <p className="text-sm text-on-surface-variant">
-                                    This action cannot be undone.
-                                </p>
-                            </div>
+                            <AlertTriangle size={24} className="text-red-400" />
+                            <h3 className="headline-md text-on-surface">Confirm Reset</h3>
                         </div>
-                        <p className="body-md text-on-surface-variant">
-                            Are you sure you want to reset all tenant settings to their default
-                            values? This will immediately affect all users.
-                        </p>
+                        <p className="body-md text-on-surface-variant">Are you sure you want to reset all tenant settings? This cannot be undone.</p>
                         <div className="flex gap-3 justify-end">
-                            <button
-                                onClick={() => setShowResetModal(false)}
-                                className="btn-secondary !h-10"
-                                id="cancel-reset-btn"
-                            >
-                                <X size={16} />
-                                Cancel
-                            </button>
+                            <button onClick={() => setShowResetModal(false)} className="btn-secondary !h-10">Cancel</button>
                             <button
                                 onClick={() => resetMutation.mutate()}
                                 disabled={resetMutation.isPending}
-                                className="h-10 px-6 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
-                                id="confirm-reset-btn"
+                                className="h-10 px-6 bg-red-600 text-white font-bold rounded-lg hover:bg-red-700 transition-colors"
                             >
-                                <Check size={16} />
                                 {resetMutation.isPending ? 'Resetting…' : 'Yes, Reset Everything'}
                             </button>
                         </div>

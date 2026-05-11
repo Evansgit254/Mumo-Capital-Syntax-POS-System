@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { notFound } from '../lib/errors';
 import { validate } from '../middleware/validate';
@@ -28,7 +29,10 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
             where,
             orderBy: { name: 'asc' },
         });
-        res.json(customers);
+        res.json(customers.map(c => ({
+            ...c,
+            totalSpend: c.totalSpend.toNumber()
+        })));
     } catch (err) {
         next(err);
     }
@@ -42,7 +46,10 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
             where: { id: req.params.id, tenantId },
         });
         if (!customer) throw notFound('Customer not found');
-        res.json(customer);
+        res.json({
+            ...customer,
+            totalSpend: customer.totalSpend.toNumber()
+        });
     } catch (err) {
         next(err);
     }
@@ -56,9 +63,16 @@ router.post(
         try {
             const { tenantId } = req.user!;
             const customer = await prisma.customer.create({
-                data: { ...req.body, tenantId },
+                data: {
+                    ...req.body,
+                    tenantId,
+                    totalSpend: new Prisma.Decimal(req.body.totalSpend || 0)
+                },
             });
-            res.status(201).json(customer);
+            res.status(201).json({
+                ...customer,
+                totalSpend: customer.totalSpend.toNumber()
+            });
         } catch (err) {
             next(err);
         }
@@ -81,9 +95,15 @@ router.put(
 
             const updated = await prisma.customer.update({
                 where: { id: req.params.id },
-                data: req.body,
+                data: {
+                    ...req.body,
+                    totalSpend: req.body.totalSpend !== undefined ? new Prisma.Decimal(req.body.totalSpend) : undefined
+                },
             });
-            res.json(updated);
+            res.json({
+                ...updated,
+                totalSpend: updated.totalSpend.toNumber()
+            });
         } catch (err) {
             next(err);
         }

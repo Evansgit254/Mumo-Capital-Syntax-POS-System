@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { Role } from '@mumo/types';
 
 export const loginSchema = z.object({
     email: z
@@ -28,10 +27,6 @@ export const registerSchema = z.object({
     tenantId: z
         .string({ required_error: 'Tenant ID is required' })
         .uuid('Tenant ID must be a valid UUID'),
-    role: z
-        .nativeEnum(Role, { errorMap: () => ({ message: `Role must be one of: ${Object.values(Role).join(', ')}` }) })
-        .optional()
-        .default(Role.STAFF),
 });
 
 export const refreshSchema = z.object({

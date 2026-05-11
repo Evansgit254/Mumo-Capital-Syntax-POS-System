@@ -9,6 +9,11 @@ async function main() {
     console.log('🌱 Seeding database...\n');
 
     // ── Clean existing data (order matters for FK constraints) ─────────────────
+    await prisma.clockEvent.deleteMany();
+    await prisma.shift.deleteMany();
+    await prisma.activityBooking.deleteMany();
+    await prisma.activity.deleteMany();
+    await prisma.serviceRequest.deleteMany();
     await prisma.rolePermission.deleteMany();
     await prisma.tenantSettings.deleteMany();
     await prisma.inventoryItem.deleteMany();
@@ -44,6 +49,7 @@ async function main() {
             firstName: 'Alice',
             lastName: 'Director',
             role: 'TENANT_ADMIN',
+            hourlyRate: 65.00,
         },
     });
     const t1Manager = await prisma.user.create({
@@ -54,6 +60,7 @@ async function main() {
             firstName: 'Bob',
             lastName: 'Manager',
             role: 'MANAGER',
+            hourlyRate: 45.00,
         },
     });
     const t1Cashier = await prisma.user.create({
@@ -64,6 +71,7 @@ async function main() {
             firstName: 'Carol',
             lastName: 'Staff',
             role: 'STAFF',
+            hourlyRate: 22.00,
         },
     });
     console.log(`   Users: ${t1Admin.email}, ${t1Manager.email}, ${t1Cashier.email}`);
@@ -194,6 +202,17 @@ async function main() {
     });
     console.log('   Settings: created');
 
+    // Activities
+    await prisma.activity.createMany({
+        data: [
+            { tenantId: tenant1.id, name: 'Private Scuba Diving', description: 'Deep sea diving with an expert instructor', duration: 120, price: 5000, maxCapacity: 4, availableSlots: 4 },
+            { tenantId: tenant1.id, name: 'Sunset Cruise', description: 'Scenic boat ride during sunset with cocktails', duration: 90, price: 3000, maxCapacity: 20, availableSlots: 20 },
+            { tenantId: tenant1.id, name: 'Couples Spa Massage', description: 'Relaxing 1-hour swedish massage', duration: 60, price: 8000, maxCapacity: 2, availableSlots: 2 },
+            { tenantId: tenant1.id, name: 'Jet Ski Rental', description: 'High speed jet ski for 30 minutes', duration: 30, price: 2500, maxCapacity: 10, availableSlots: 10 },
+        ]
+    });
+    console.log('   Activities: 4 created');
+
     // Role Permissions (custom STAFF override)
     await prisma.rolePermission.create({
         data: {
@@ -230,6 +249,7 @@ async function main() {
             firstName: 'David',
             lastName: 'Owner',
             role: 'TENANT_ADMIN',
+            hourlyRate: 65.00,
         },
     });
     const t2Manager = await prisma.user.create({
@@ -240,6 +260,7 @@ async function main() {
             firstName: 'Eva',
             lastName: 'Floor Manager',
             role: 'MANAGER',
+            hourlyRate: 45.00,
         },
     });
     const t2Cashier = await prisma.user.create({
@@ -250,6 +271,7 @@ async function main() {
             firstName: 'Frank',
             lastName: 'Cashier',
             role: 'STAFF',
+            hourlyRate: 22.00,
         },
     });
     console.log(`   Users: ${t2Admin.email}, ${t2Manager.email}, ${t2Cashier.email}`);
@@ -369,6 +391,17 @@ async function main() {
     });
     console.log('   Settings: created');
 
+    // Activities
+    await prisma.activity.createMany({
+        data: [
+            { tenantId: tenant2.id, name: 'Coastal Wine Tasting', description: 'Sample local wines by the beach', duration: 90, price: 45, maxCapacity: 15, availableSlots: 15 },
+            { tenantId: tenant2.id, name: 'Surfing Lessons', description: '1-on-1 surfing lesson for beginners', duration: 60, price: 80, maxCapacity: 5, availableSlots: 5 },
+            { tenantId: tenant2.id, name: 'Beach Yoga', description: 'Morning yoga session', duration: 45, price: 20, maxCapacity: 30, availableSlots: 30 },
+            { tenantId: tenant2.id, name: 'Oyster Shucking Class', description: 'Learn to shuck and pair oysters', duration: 60, price: 65, maxCapacity: 10, availableSlots: 10 },
+        ]
+    });
+    console.log('   Activities: 4 created');
+
     // Role Permissions (custom STAFF override)
     await prisma.rolePermission.create({
         data: {
@@ -383,6 +416,77 @@ async function main() {
         },
     });
     console.log('   Role Permissions: STAFF customized\n');
+
+    // ══════════════════════════════════════════════════════════════════════════════
+    // SHIFTS & CLOCK EVENTS
+    // ══════════════════════════════════════════════════════════════════════════════
+    
+    // Generate shifts for the current week starting Monday
+    const today = new Date();
+    const currentDay = today.getDay();
+    const diffToMonday = today.getDate() - currentDay + (currentDay === 0 ? -6 : 1);
+    const startOfWeek = new Date(today.setDate(diffToMonday));
+    startOfWeek.setHours(0, 0, 0, 0);
+
+    const shiftData = [];
+    const clockData = [];
+
+    const allUsers = [
+        { user: t1Admin, tenant: tenant1 },
+        { user: t1Manager, tenant: tenant1 },
+        { user: t1Cashier, tenant: tenant1 },
+        { user: t2Admin, tenant: tenant2 },
+        { user: t2Manager, tenant: tenant2 },
+        { user: t2Cashier, tenant: tenant2 },
+    ];
+
+    for (let i = 0; i < 5; i++) { // Mon to Fri
+        const shiftDate = new Date(startOfWeek);
+        shiftDate.setDate(shiftDate.getDate() + i);
+
+        const startTime = new Date(shiftDate);
+        startTime.setHours(9, 0, 0, 0); // 9 AM
+        
+        const endTime = new Date(shiftDate);
+        endTime.setHours(17, 0, 0, 0); // 5 PM
+
+        for (const { user, tenant } of allUsers) {
+            shiftData.push({
+                tenantId: tenant.id,
+                userId: user.id,
+                date: shiftDate,
+                startTime,
+                endTime,
+                station: user.role === 'STAFF' ? 'Register' : 'Floor',
+            });
+            
+            // Add some synthetic clock events (only if date is in the past or today)
+            if (shiftDate <= new Date()) {
+                const shiftStartActual = new Date(startTime.getTime() - Math.random() * 600000); // 0-10m before
+                clockData.push({
+                    tenantId: tenant.id,
+                    userId: user.id,
+                    type: 'IN',
+                    timestamp: shiftStartActual,
+                });
+                
+                // if it's a completely past day
+                if (shiftDate.getDate() !== new Date().getDate()) {
+                    const shiftEndActual = new Date(endTime.getTime() + Math.random() * 600000); // 0-10m after
+                    clockData.push({
+                        tenantId: tenant.id,
+                        userId: user.id,
+                        type: 'OUT',
+                        timestamp: shiftEndActual,
+                    });
+                }
+            }
+        }
+    }
+
+    await prisma.shift.createMany({ data: shiftData });
+    await prisma.clockEvent.createMany({ data: clockData });
+    console.log('   Shifts & Clock Events: Created a week of shifts for all users\n');
 
     // ── Summary ────────────────────────────────────────────────────────────────
     console.log('═══════════════════════════════════════════════════════');

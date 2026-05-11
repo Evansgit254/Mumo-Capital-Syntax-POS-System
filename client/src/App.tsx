@@ -6,6 +6,8 @@ import Shell from './components/layout/Shell';
 import LoginPage from './pages/LoginPage';
 import CheckInPage from './pages/reception/CheckInPage';
 import RoomServicePage from './pages/RoomServicePage';
+import ConciergePage from './pages/ConciergePage';
+import ActivityBookingPage from './pages/ActivityBookingPage';
 import DashboardPage from './pages/DashboardPage';
 import POSPage from './pages/POSPage';
 import TableMapPage from './pages/TableMapPage';
@@ -17,9 +19,17 @@ import CheckoutPage from './pages/CheckoutPage';
 import ReportsPage from './pages/ReportsPage';
 import PermissionsPage from './pages/admin/PermissionsPage';
 import TenantPage from './pages/admin/TenantPage';
+import TableManagementPage from './pages/admin/TableManagementPage';
 import SettingsPage from './pages/SettingsPage';
-import InventoryPage from './pages/InventoryPage';
+import InventoryPage from './pages/inventory/InventoryPage';
+import InventoryForecastPage from './pages/inventory/InventoryForecastPage';
+import VendorPage from './pages/vendors/VendorPage';
 import LoyaltyPage from './pages/LoyaltyPage';
+import BillingPage from './pages/BillingPage';
+import GuestDirectoryPage from './pages/GuestDirectoryPage';
+import GuestFolioPage from './pages/GuestFolioPage';
+import WorkforcePage from './pages/admin/WorkforcePage';
+import ExecutiveAnalyticsPage from './pages/admin/ExecutiveAnalyticsPage';
 import { Role } from '@mumo/types';
 
 function App() {
@@ -29,6 +39,8 @@ function App() {
                 {/* Guest-Facing Routes (Public) */}
                 <Route path="/checkin" element={<CheckInPage />} />
                 <Route path="/room-service" element={<RoomServicePage />} />
+                <Route path="/concierge" element={<ConciergePage />} />
+                <Route path="/activities" element={<ActivityBookingPage />} />
 
                 {/* Public Staff Route */}
                 <Route path="/login" element={<LoginPage />} />
@@ -53,14 +65,23 @@ function App() {
                             <Route path="/reservations" element={<ReservationsPage />} />
                         </Route>
 
+                        <Route element={<ProtectedRoute allowedRoles={[Role.TENANT_ADMIN, Role.MANAGER, Role.STAFF]} />}>
+                            <Route path="/guests" element={<GuestDirectoryPage />} />
+                            <Route path="/folio/:roomId" element={<GuestFolioPage />} />
+                        </Route>
+
                         <Route path="/menu" element={<MenuManagerPage />} />
                         <Route path="/checkout" element={<CheckoutPage />} />
+                        <Route path="/billing" element={<BillingPage />} />
                         <Route path="/reports" element={<ReportsPage />} />
 
                         {/* Inventory (Manager/Admin) */}
                         <Route element={<ProtectedRoute allowedRoles={[Role.TENANT_ADMIN, Role.MANAGER]} />}>
                             <Route path="/inventory" element={<InventoryPage />} />
+                            <Route path="/inventory/forecast" element={<InventoryForecastPage />} />
+                            <Route path="/vendors" element={<VendorPage />} />
                             <Route path="/loyalty" element={<LoyaltyPage />} />
+                            <Route path="/admin/workforce" element={<WorkforcePage />} />
                         </Route>
 
                         {/* Settings (All authenticated roles) */}
@@ -70,6 +91,8 @@ function App() {
                         <Route element={<ProtectedRoute allowedRoles={[Role.TENANT_ADMIN]} />}>
                             <Route path="/admin/permissions" element={<PermissionsPage />} />
                             <Route path="/admin/tenant" element={<TenantPage />} />
+                            <Route path="/admin/tables" element={<TableManagementPage />} />
+                            <Route path="/admin/analytics" element={<ExecutiveAnalyticsPage />} />
                         </Route>
                         
                         {/* Root redirect */}

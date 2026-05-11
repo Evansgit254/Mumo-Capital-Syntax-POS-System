@@ -1,4 +1,5 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { requireRole } from '../middleware/requireRole';
 import { validate } from '../middleware/validate';
@@ -22,7 +23,10 @@ router.get(
                 update: {},
             });
 
-            res.json(settings);
+            res.json({
+                ...settings,
+                taxRate: settings.taxRate.toNumber()
+            });
         } catch (err) {
             next(err);
         }
@@ -37,14 +41,25 @@ router.put(
     async (req: Request, res: Response, next: NextFunction) => {
         try {
             const { tenantId } = req.user!;
+            const { taxRate, ...rest } = req.body;
 
             const settings = await prisma.tenantSettings.upsert({
                 where: { tenantId },
-                create: { tenantId, ...req.body },
-                update: req.body,
+                create: { 
+                    tenantId, 
+                    ...rest,
+                    taxRate: taxRate !== undefined ? new Prisma.Decimal(taxRate) : undefined 
+                },
+                update: {
+                    ...rest,
+                    taxRate: taxRate !== undefined ? new Prisma.Decimal(taxRate) : undefined 
+                },
             });
 
-            res.json(settings);
+            res.json({
+                ...settings,
+                taxRate: settings.taxRate.toNumber()
+            });
         } catch (err) {
             next(err);
         }

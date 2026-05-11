@@ -1,6 +1,8 @@
 import express from 'express';
 import cors from 'cors';
+import helmet from 'helmet';
 import morgan from 'morgan';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 
 import { authenticate, extractTenant } from './middleware/auth';
@@ -18,6 +20,13 @@ import inventoryRoutes from './routes/inventory';
 import tenantSettingsRoutes from './routes/tenant-settings';
 import permissionRoutes from './routes/permissions';
 import userRoutes from './routes/users';
+import tenantPublicRoutes from './routes/tenants-public';
+import requestsRoutes from './routes/requests';
+import activitiesRoutes from './routes/activities';
+import shiftsRoutes from './routes/shifts';
+import clockEventsRoutes from './routes/clock-events';
+import activityBookingsRoutes from './routes/activity-bookings';
+import vendorRoutes from './routes/vendors';
 
 dotenv.config();
 
@@ -25,7 +34,13 @@ const app = express();
 const port = process.env.PORT || 5000;
 
 // ── Global Middleware ────────────────────────────────────────────────────────
-app.use(cors({ origin: process.env.FRONTEND_URL }));
+// FIX 9 — CRITICAL-012: Helmet FIRST, before all other middleware
+app.use(helmet());
+app.use(cors({
+    origin: process.env.FRONTEND_URL,
+    credentials: true, // FIX 11: Allow cookies to be sent cross-origin
+}));
+app.use(cookieParser());
 app.use(express.json());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
@@ -41,6 +56,12 @@ app.use('/api/public/reservations', extractTenant, reservationRoutes);
 app.use('/api/public/orders', extractTenant, orderRoutes);
 app.use('/api/public/menus', extractTenant, menuRoutes);
 app.use('/api/public/tables', extractTenant, tableRoutes);
+app.use('/api/public/tenants', tenantPublicRoutes);
+app.use('/api/requests', requestsRoutes);
+app.use('/api/activities', activitiesRoutes);
+app.use('/api/shifts', shiftsRoutes);
+app.use('/api/clock-events', clockEventsRoutes);
+app.use('/api/activity-bookings', activityBookingsRoutes);
 
 // ── Protected Routes (require auth + tenant validation) ──────────────────────
 app.use('/api/menus', authenticate, menuRoutes);
@@ -54,6 +75,7 @@ app.use('/api/inventory', authenticate, inventoryRoutes);
 app.use('/api/tenants', authenticate, tenantSettingsRoutes);
 app.use('/api/roles', authenticate, permissionRoutes);
 app.use('/api/users', authenticate, userRoutes);
+app.use('/api/vendors', authenticate, vendorRoutes);
 
 // ── Centralized Error Handler (must be last) ─────────────────────────────────
 // Trigger reload for Prisma client sync

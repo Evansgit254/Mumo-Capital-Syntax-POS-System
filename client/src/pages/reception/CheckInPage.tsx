@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
+import { useTenant } from '../../hooks/useTenant';
 import { guestService, getErrorMessage } from '../../api/service';
 import { 
     Search, 
@@ -22,17 +23,17 @@ type Step = 'lookup' | 'confirm' | 'success';
 export default function CheckInPage() {
     const [searchParams] = useSearchParams();
     const { guest } = useStore();
+    const { tenant, isLoading: isTenantLoading, error: tenantError } = useTenant();
     const [step, setStep] = useState<Step>('lookup');
     const [lookupValue, setLookupValue] = useState('');
     const [reservation, setReservation] = useState<any>(null);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        const tid = searchParams.get('tenantId');
-        if (tid) {
-            guest.setTenantId(tid);
+        if (tenant?.tenantId) {
+            guest.setTenantId(tenant.tenantId);
         }
-    }, [searchParams, guest]);
+    }, [tenant, guest]);
 
     const lookupMutation = useMutation({
         mutationFn: (val: string) => {
@@ -67,6 +68,26 @@ export default function CheckInPage() {
         lookupMutation.mutate(lookupValue);
     };
 
+    if (isTenantLoading) {
+        return (
+            <div className="min-h-screen bg-surface flex flex-col items-center justify-center p-6 text-center">
+                <Loader2 className="animate-spin text-secondary mb-4" size={48} />
+                <h2 className="headline-md">Loading Check-In Service</h2>
+            </div>
+        );
+    }
+
+    if (tenantError || !tenant) {
+        return (
+            <div className="min-h-screen bg-surface flex flex-col items-center justify-center p-6 pb-[20vh] text-center">
+                <AlertCircle className="text-error mb-4" size={48} />
+                <p className="body-lg text-on-surface-variant max-w-sm">
+                    {tenantError || 'Unable to identify hotel system.'}
+                </p>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-screen bg-surface flex flex-col items-center p-6 tablet:p-12">
             {/* Header / Branding */}
@@ -74,7 +95,7 @@ export default function CheckInPage() {
                 <div className="h-16 w-16 bg-secondary rounded-2xl flex items-center justify-center mb-6 shadow-xl shadow-secondary/20">
                     <Building2 className="text-white" size={32} />
                 </div>
-                <h1 className="display-lg text-center tracking-tight">Welcome to Mumo</h1>
+                <h1 className="display-lg text-center tracking-tight">Welcome to {tenant.displayName || tenant.tenantName}</h1>
                 <p className="body-lg text-on-surface-variant text-center mt-2">Mobile Check-in Experience</p>
             </header>
 
