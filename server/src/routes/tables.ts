@@ -129,7 +129,7 @@ router.put(
             const { tenantId } = req.user!;
             const { tables } = req.body;
 
-            const tableIds = tables.map((t: any) => t.id);
+            const tableIds = tables.map((t: LooseValue) => t.id);
 
             // 1. Validate all tables belong to the tenant
             const existingCount = await prisma.table.count({
@@ -147,7 +147,7 @@ router.put(
 
             // 2. Execute transaction
             const result = await prisma.$transaction(
-                tables.map((t: any) => {
+                tables.map((t: LooseValue) => {
                     const { id, ...data } = t;
                     return prisma.table.update({
                         where: { id },
@@ -225,15 +225,9 @@ router.post(
 
             // Execute as transaction
             const updated = await prisma.$transaction(async (tx) => {
-                // Update all active orders to SERVED
-                await tx.order.updateMany({
-                    where: { 
-                        tableId: id, 
-                        tenantId, 
-                        status: { notIn: ['CANCELLED', 'SERVED'] } 
-                    },
-                    data: { status: 'SERVED' }
-                });
+                // REMOVED: Automatic status update to SERVED.
+                // Orders should remain PENDING/PREPARING/READY in KDS until manually served,
+                // even if the bill is settled early (Direct POS workflow).
 
                 // Mark table as available
                 return tx.table.update({

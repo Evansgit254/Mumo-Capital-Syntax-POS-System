@@ -38,7 +38,7 @@ export function CardSkeleton() {
 
 export function RowSkeleton() {
   return (
-    <div className="h-[72px] border-b border-[#2c2c2c] flex items-center px-4 gap-4 animate-pulse">
+    <div className="h-[72px] border-b border-[var(--surface-bright)] flex items-center px-4 gap-4 animate-pulse">
       <Skeleton variant="circle" className="h-10 w-10 shrink-0" />
       <div className="flex-1 space-y-2">
         <Skeleton variant="text" className="w-1/4" />

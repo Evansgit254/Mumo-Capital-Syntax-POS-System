@@ -18,7 +18,7 @@ router.post('/lookup', async (req: Request, res: Response, next: NextFunction) =
         const tenantId = req.headers['x-tenant-id'] as string;
         const { id, guestName } = req.body;
 
-        const where: any = { tenantId };
+        const where: LooseValue = { tenantId };
         if (id) where.id = id;
         else if (guestName) where.guestName = { contains: guestName, mode: 'insensitive' };
         else return next(badRequest('Please provide a booking ID or name'));

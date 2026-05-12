@@ -9,7 +9,7 @@ export const createMenuItemSchema = z.object({
     price: z
         .number({ required_error: 'Price is required', invalid_type_error: 'Price must be a number' })
         .positive('Price must be greater than zero'),
-    categoryId: z.string().uuid('Category ID must be a valid UUID').optional(),
+    categoryId: z.string().min(1, 'Category is required').optional(),
     isAvailable: z.boolean().optional().default(true),
 });
 
@@ -17,7 +17,7 @@ export const updateMenuItemSchema = z.object({
     name: z.string().min(1).max(200).optional(),
     description: z.string().max(1000).optional(),
     price: z.number().positive('Price must be greater than zero').optional(),
-    categoryId: z.string().uuid().nullish(),
+    categoryId: z.string().nullish(),
     isAvailable: z.boolean().optional(),
 });
 

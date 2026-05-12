@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma';
+import { logger } from '../lib/logger';
 import rateLimit from 'express-rate-limit';
 
 const router = Router();
@@ -34,7 +35,7 @@ router.get('/resolve', resolveLimiter, async (req, res) => {
             displayName: tenant.settings?.displayName
         });
     } catch (error) {
-        console.error('Tenant resolution error:', error);
+        logger.error({ err: error }, 'Tenant resolution failed');
         res.status(500).json({ error: 'Internal server error while resolving tenant' });
     }
 });

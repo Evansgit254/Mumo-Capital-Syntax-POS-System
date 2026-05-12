@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
+import { logger } from '../lib/logger';
 import { authenticate } from '../middleware/auth';
 import { requireRole } from '../middleware/requireRole';
 import { Role } from '@mumo/types';
@@ -40,7 +41,7 @@ router.get('/', requireRole(Role.TENANT_ADMIN, Role.MANAGER), async (req, res) =
 
         res.json(clockEvents);
     } catch (error) {
-        console.error('Error fetching clock events:', error);
+        logger.error({ err: error }, 'Error fetching clock events');
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -96,7 +97,7 @@ router.post('/', async (req, res) => {
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: error.errors[0].message });
         }
-        console.error('Error creating clock event:', error);
+        logger.error({ err: error }, 'Error creating clock event');
         res.status(500).json({ error: 'Internal server error' });
     }
 });

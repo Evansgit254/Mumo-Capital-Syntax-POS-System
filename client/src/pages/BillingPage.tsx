@@ -10,6 +10,7 @@ import {
     History,
     CheckCircle2
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 export default function BillingPage() {
     return (
@@ -126,7 +127,7 @@ export default function BillingPage() {
                                     <p className="body-md text-on-surface">Current period ending <strong className="text-secondary">October 31, 2023</strong>.</p>
                                     <p className="body-md text-on-surface-variant">Ready for internal audit and resort payout.</p>
                                 </div>
-                                <button className="btn-primary w-full md:w-auto h-14 uppercase tracking-widest text-[12px] flex items-center justify-center gap-2">
+                                <button onClick={() => toast('Settlement initiation coming soon! Contact finance team for manual payouts.', { icon: '💳', duration: 4000 })} className="btn-primary w-full md:w-auto h-14 uppercase tracking-widest text-[12px] flex items-center justify-center gap-2">
                                     Initiate Payout <ArrowRight size={16} />
                                 </button>
                             </div>

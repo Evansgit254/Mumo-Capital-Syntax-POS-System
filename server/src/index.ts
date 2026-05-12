@@ -1,9 +1,10 @@
+import 'dotenv/config';
+
 import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import cookieParser from 'cookie-parser';
-import dotenv from 'dotenv';
 
 import { authenticate, extractTenant } from './middleware/auth';
 import { errorHandler } from './middleware/errorHandler';
@@ -28,17 +29,30 @@ import clockEventsRoutes from './routes/clock-events';
 import activityBookingsRoutes from './routes/activity-bookings';
 import vendorRoutes from './routes/vendors';
 
-dotenv.config();
-
 const app = express();
 const port = process.env.PORT || 5000;
+const rawOrigins = (process.env.ALLOWED_ORIGINS || process.env.FRONTEND_URL || '').split(',')
+    .map(o => o.trim())
+    .filter(Boolean);
 
 // ── Global Middleware ────────────────────────────────────────────────────────
 // FIX 9 — CRITICAL-012: Helmet FIRST, before all other middleware
 app.use(helmet());
 app.use(cors({
-    origin: process.env.FRONTEND_URL,
-    credentials: true, // FIX 11: Allow cookies to be sent cross-origin
+    origin: (origin, callback) => {
+        if (!origin) return callback(null, true);
+        const allowed = rawOrigins.some(pattern => {
+            if (pattern.startsWith('*.')) {
+                const domain = pattern.slice(2);
+                return origin.endsWith(`.${domain}`) ||
+                    origin === `https://${domain}`;
+            }
+            return origin === pattern;
+        });
+        if (allowed) callback(null, true);
+        else callback(new Error(`CORS: ${origin} not allowed`));
+    },
+    credentials: true,
 }));
 app.use(cookieParser());
 app.use(express.json());

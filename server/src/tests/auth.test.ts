@@ -5,8 +5,7 @@ import { authenticate } from '../middleware/auth';
 import { AppError } from '../lib/errors';
 import { Role } from '@mumo/types';
 
-// Mock environment
-vi.stubEnv('JWT_SECRET', 'test-secret');
+const TEST_SECRET = process.env.JWT_SECRET || 'test-secret-32-characters-minimum';
 
 function createMockReqRes(overrides: Partial<Request> = {}) {
     const req = {
@@ -27,8 +26,8 @@ describe('authenticate middleware', () => {
     it('should call next() with no error for a valid token and matching x-tenant-id', () => {
         const tenantId = 'tenant-123';
         const token = jwt.sign(
-            { userId: 'user-1', tenantId, role: Role.STAFF },
-            'test-secret',
+            { id: 'user-1', tenantId, role: Role.STAFF },
+            TEST_SECRET,
             { expiresIn: '15m' }
         );
 
@@ -75,8 +74,8 @@ describe('authenticate middleware', () => {
 
     it('should pass 401 AppError for an expired token', () => {
         const token = jwt.sign(
-            { userId: 'user-1', tenantId: 'tenant-1', role: Role.STAFF },
-            'test-secret',
+            { id: 'user-1', tenantId: 'tenant-1', role: Role.STAFF },
+            TEST_SECRET,
             { expiresIn: '0s' } // already expired
         );
 
@@ -98,7 +97,7 @@ describe('authenticate middleware', () => {
 
     it('should pass 401 AppError for a token signed with wrong secret', () => {
         const token = jwt.sign(
-            { userId: 'user-1', tenantId: 'tenant-1', role: Role.STAFF },
+            { id: 'user-1', tenantId: 'tenant-1', role: Role.STAFF },
             'wrong-secret',
             { expiresIn: '15m' }
         );
@@ -120,8 +119,8 @@ describe('authenticate middleware', () => {
 
     it('should pass 403 AppError when x-tenant-id header is missing', () => {
         const token = jwt.sign(
-            { userId: 'user-1', tenantId: 'tenant-1', role: Role.STAFF },
-            'test-secret',
+            { id: 'user-1', tenantId: 'tenant-1', role: Role.STAFF },
+            TEST_SECRET,
             { expiresIn: '15m' }
         );
 
@@ -140,8 +139,8 @@ describe('authenticate middleware', () => {
 
     it('should pass 403 AppError when x-tenant-id does not match JWT tenantId', () => {
         const token = jwt.sign(
-            { userId: 'user-1', tenantId: 'tenant-AAA', role: Role.STAFF },
-            'test-secret',
+            { id: 'user-1', tenantId: 'tenant-AAA', role: Role.STAFF },
+            TEST_SECRET,
             { expiresIn: '15m' }
         );
 
@@ -161,3 +160,4 @@ describe('authenticate middleware', () => {
         expect(err.message).toContain('mismatch');
     });
 });
+

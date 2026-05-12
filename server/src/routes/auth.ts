@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcrypt';
 import rateLimit from 'express-rate-limit';
 import { prisma } from '../lib/prisma';
+import { logger } from '../lib/logger';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../lib/jwt';
 import { unauthorized, notFound, conflict, forbidden } from '../lib/errors';
 import { validate } from '../middleware/validate';
@@ -247,6 +248,7 @@ router.post('/refresh', authLimiter, async (req: Request, res: Response, next: N
         // Ensure the user still exists and is active
         const user = await prisma.user.findUnique({
             where: { id: decoded.id },
+            include: { tenant: true },
         });
 
         if (!user) {
@@ -284,6 +286,15 @@ router.post('/refresh', authLimiter, async (req: Request, res: Response, next: N
 
         res.json({
             accessToken: newAccessToken,
+            user: {
+                id: user.id,
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                role: user.role,
+                tenantId: user.tenantId,
+                tenantName: user.tenant.name,
+            },
         });
     } catch (err) {
         next(err);
@@ -319,10 +330,10 @@ setInterval(async () => {
             where: { expiresAt: { lt: cutoff } },
         });
         if (result.count > 0) {
-            console.log(`[RefreshToken Cleanup] Deleted ${result.count} expired tokens`);
+            logger.info({ deletedCount: result.count }, 'Refresh token cleanup completed');
         }
     } catch (err) {
-        console.error('[RefreshToken Cleanup] Error:', err);
+        logger.error({ err }, 'Refresh token cleanup failed');
     }
 }, CLEANUP_INTERVAL_MS);
 

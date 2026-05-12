@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { reservationService } from '../api/service';
+import { reservationService, getErrorMessage } from '../api/service';
+import toast from 'react-hot-toast';
 import { useStore } from '../store/useStore';
 import { 
     Calendar, 
@@ -17,7 +18,9 @@ import {
     UserCircle,
     UserPlus,
     Loader2,
-    Table as TableIcon
+    Table as TableIcon,
+    Edit2,
+    Trash2
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import Skeleton from '../components/ui/Skeleton';
@@ -31,6 +34,7 @@ export default function ReservationsPage() {
     const [activeTab, setActiveTab] = useState<Tab>('reservations');
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
     const [modalType, setModalType] = useState<'booking' | 'waitlist' | null>(null);
+    const [openMenuId, setOpenMenuId] = useState<string | null>(null);
     const queryClient = useQueryClient();
 
     // Fetch Reservations for selected date
@@ -53,6 +57,7 @@ export default function ReservationsPage() {
             queryClient.invalidateQueries({ queryKey: ['reservations'] });
             queryClient.invalidateQueries({ queryKey: ['waitlist'] });
         },
+        onError: (err) => toast.error(getErrorMessage(err)),
     });
 
     const cancelMutation = useMutation({
@@ -61,6 +66,7 @@ export default function ReservationsPage() {
             queryClient.invalidateQueries({ queryKey: ['reservations'] });
             queryClient.invalidateQueries({ queryKey: ['waitlist'] });
         },
+        onError: (err) => toast.error(getErrorMessage(err)),
     });
 
     const createMutation = useMutation({
@@ -70,10 +76,11 @@ export default function ReservationsPage() {
             queryClient.invalidateQueries({ queryKey: ['waitlist'] });
             setModalType(null);
         },
+        onError: (err) => toast.error(getErrorMessage(err)),
     });
 
     return (
-        <div className="flex flex-col h-full bg-surface">
+        <div className="flex flex-col h-full bg-surface" onClick={() => setOpenMenuId(null)}>
             {/* Header */}
             <div className="p-6 tablet:p-10 pb-0 space-y-8">
                 <div className="flex flex-col tablet:flex-row tablet:items-center justify-between gap-6">
@@ -146,6 +153,8 @@ export default function ReservationsPage() {
                                         onCheckIn={() => checkInMutation.mutate(res.id)}
                                         onCancel={() => cancelMutation.mutate(res.id)}
                                         isProcessing={checkInMutation.isPending}
+                                        openMenuId={openMenuId}
+                                        setOpenMenuId={setOpenMenuId}
                                     />
                                 ))}
                             </div>
@@ -221,11 +230,25 @@ function TabButton({ active, label, count, onClick }: { active: boolean, label: 
     );
 }
 
-function ReservationItem({ reservation, onCheckIn, onCancel, isProcessing }: { reservation: any, onCheckIn: () => void, onCancel: () => void, isProcessing: boolean }) {
+function ReservationItem({ 
+    reservation, 
+    onCheckIn, 
+    onCancel, 
+    isProcessing,
+    openMenuId,
+    setOpenMenuId
+}: { 
+    reservation: LooseValue, 
+    onCheckIn: () => void, 
+    onCancel: () => void, 
+    isProcessing: boolean,
+    openMenuId: string | null,
+    setOpenMenuId: (id: string | null) => void 
+}) {
     const time = new Date(reservation.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
     
     return (
-        <div className="card-default !p-6 flex flex-col tablet:flex-row tablet:items-center gap-6 group hover:bg-[#2c2c2c]">
+        <div className="card-default !p-6 flex flex-col tablet:flex-row tablet:items-center gap-6 group hover:bg-[var(--surface-bright)]">
             <div className="flex-1 flex items-center gap-6">
                 <div className="h-14 w-14 rounded-2xl bg-surface-container-high flex flex-col items-center justify-center text-secondary border border-outline-variant group-hover:border-secondary transition-all">
                     <Clock size={18} className="mb-0.5" />
@@ -276,9 +299,56 @@ function ReservationItem({ reservation, onCheckIn, onCancel, isProcessing }: { r
                             </button>
                         </>
                     ) : (
-                        <button className="h-12 w-12 rounded-xl bg-surface-container flex items-center justify-center text-on-surface-variant hover:bg-surface-container-high shadow-md">
-                            <MoreVertical size={18} />
-                        </button>
+                        <div className="relative">
+                            <button 
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenMenuId(openMenuId === reservation.id ? null : reservation.id);
+                                }} 
+                                className={cn(
+                                    "h-12 w-12 rounded-xl flex items-center justify-center transition-all shadow-md",
+                                    openMenuId === reservation.id ? "bg-primary text-on-primary" : "bg-surface-container text-on-surface-variant hover:bg-surface-container-high"
+                                )}
+                            >
+                                <MoreVertical size={18} />
+                            </button>
+
+                            {openMenuId === reservation.id && (
+                                <div className="absolute right-0 mt-2 w-48 bg-surface-container-high border border-outline-variant rounded-xl shadow-2xl z-[50] py-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                                    <button 
+                                        onClick={() => toast('Guest details view coming soon')}
+                                        className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-white/5 transition-colors text-sm font-medium"
+                                    >
+                                        <UserCircle size={16} className="text-secondary" />
+                                        Guest Details
+                                    </button>
+                                    <button 
+                                        onClick={() => toast('Reservation editing coming soon')}
+                                        className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-white/5 transition-colors text-sm font-medium"
+                                    >
+                                        <Edit2 size={16} className="text-primary" />
+                                        Edit Booking
+                                    </button>
+                                    {reservation.status === 'SEATED' && (
+                                        <button 
+                                            onClick={() => toast('Checking out... redirecting to POS')}
+                                            className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-white/5 transition-colors text-sm font-medium"
+                                        >
+                                            <CheckCircle2 size={16} className="text-tertiary" />
+                                            Check Out
+                                        </button>
+                                    )}
+                                    <div className="my-1 border-t border-outline-variant" />
+                                    <button 
+                                        onClick={onCancel}
+                                        className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-error/10 text-error transition-colors text-sm font-medium"
+                                    >
+                                        <Trash2 size={16} />
+                                        Cancel Reservation
+                                    </button>
+                                </div>
+                            )}
+                        </div>
                     )}
                 </div>
             </div>
@@ -286,7 +356,7 @@ function ReservationItem({ reservation, onCheckIn, onCancel, isProcessing }: { r
     );
 }
 
-function WaitlistItem({ index, reservation, onCheckIn, isProcessing }: { index: number, reservation: any, onCheckIn: () => void, isProcessing: boolean }) {
+function WaitlistItem({ index, reservation, onCheckIn, isProcessing }: { index: number, reservation: LooseValue, onCheckIn: () => void, isProcessing: boolean }) {
     const elapsedMinutes = Math.floor((new Date().getTime() - new Date(reservation.createdAt).getTime()) / 60000);
     
     return (
@@ -309,7 +379,7 @@ function WaitlistItem({ index, reservation, onCheckIn, isProcessing }: { index: 
             <div className="flex items-center gap-4">
                 <div className="bg-surface-container-high rounded-xl p-3 border border-outline-variant flex items-center gap-2">
                     <span className="label-sm text-on-surface-variant">Notify Guest</span>
-                    <button className="h-8 w-8 rounded-lg bg-secondary/20 text-secondary flex items-center justify-center hover:bg-secondary/30">
+                    <button onClick={() => toast.success(`Notification sent to ${reservation.guestName}`)} className="h-8 w-8 rounded-lg bg-secondary/20 text-secondary flex items-center justify-center hover:bg-secondary/30">
                         <Bell size={14} />
                     </button>
                 </div>

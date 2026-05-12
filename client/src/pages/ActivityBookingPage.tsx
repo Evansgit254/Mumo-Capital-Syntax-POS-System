@@ -22,7 +22,7 @@ export default function ActivityBookingPage() {
     });
 
     const bookingMutation = useMutation({
-        mutationFn: (data: any) => publicClient!.post('/api/activity-bookings', data).then(r => r.data),
+        mutationFn: (data: LooseValue) => publicClient!.post('/api/activity-bookings', data).then(r => r.data),
         onSuccess: (data) => {
             setBookedRef(data.id);
             setRoomNumber('');

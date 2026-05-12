@@ -41,7 +41,7 @@ const InventoryForecastPage: React.FC = () => {
             const itemUsage = orders
                 .filter(order => new Date(order.createdAt) >= thirtyDaysAgo)
                 .reduce((total, order) => {
-                    const lineItem = order.items?.find((i: any) => i.menuItemId === item.id);
+                    const lineItem = order.items?.find((i: LooseValue) => i.menuItemId === item.id);
                     return total + (lineItem?.quantity || 0);
                 }, 0);
 

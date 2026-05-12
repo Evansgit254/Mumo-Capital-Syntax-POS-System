@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma';
+import { logger } from '../lib/logger';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 
@@ -64,7 +65,7 @@ router.post('/', bookingLimiter, async (req, res) => {
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: 'Validation failed', details: error.errors });
         }
-        console.error('Booking error:', error);
+        logger.error({ err: error }, 'Booking error');
         res.status(500).json({ error: 'Failed to process booking' });
     }
 });

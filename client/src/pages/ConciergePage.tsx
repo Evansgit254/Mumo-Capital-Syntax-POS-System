@@ -35,7 +35,7 @@ export default function ConciergePage() {
     const publicClient = tenant ? getPublicClient(tenant.tenantId) : null;
 
     const requestMutation = useMutation({
-        mutationFn: (data: any) => publicClient!.post('/api/requests', data).then(r => r.data),
+        mutationFn: (data: LooseValue) => publicClient!.post('/api/requests', data).then(r => r.data),
         onSuccess: (data) => {
             setReferenceNumber(data.id);
             setRoomNumber('');

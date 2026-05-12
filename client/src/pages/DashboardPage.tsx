@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { orderService, tableService, inventoryService, reservationService, userService } from '../api/service';
+import { orderService, tableService, inventoryService, reservationService, userService, tenantService } from '../api/service';
 import { useStore } from '../store/useStore';
 import { 
     TrendingUp, 
@@ -14,7 +14,8 @@ import {
     Calendar,
     ChevronRight,
     CheckCircle2,
-    Package
+    Package,
+    Settings
 } from 'lucide-react';
 import Skeleton from '../components/ui/Skeleton';
 import EmptyState from '../components/ui/EmptyState';
@@ -26,6 +27,13 @@ export default function DashboardPage() {
     const { session } = useStore();
     const navigate = useNavigate();
     const todayStr = new Date().toISOString().split('T')[0];
+
+    const settingsQuery = useQuery({
+        queryKey: ['tenant-settings'],
+        queryFn: tenantService.getSettings,
+    });
+
+    const currency = settingsQuery.data?.currency || 'KES';
     
     // Queries
     const ordersQuery = useQuery({
@@ -56,12 +64,39 @@ export default function DashboardPage() {
     const isLoading = ordersQuery.isLoading || tablesQuery.isLoading || reservationsQuery.isLoading || inventoryAlertsQuery.isLoading || staffQuery.isLoading;
 
     // Derived Stats
+    const yesterdayStr = useMemo(() => {
+        const d = new Date();
+        d.setDate(d.getDate() - 1);
+        return d.toISOString().split('T')[0];
+    }, []);
+
     const todayOrders = useMemo(() => ordersQuery.data?.filter(o => {
         const orderDate = new Date(o.createdAt).toISOString().split('T')[0];
         return orderDate === todayStr;
     }) || [], [ordersQuery.data, todayStr]);
 
+    const yesterdayOrders = useMemo(() => ordersQuery.data?.filter(o => {
+        const orderDate = new Date(o.createdAt).toISOString().split('T')[0];
+        return orderDate === yesterdayStr;
+    }) || [], [ordersQuery.data, yesterdayStr]);
+
     const totalRevenue = todayOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+    const yesterdayRevenue = yesterdayOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+    
+    const revenueTrend = useMemo(() => {
+        if (yesterdayRevenue === 0) return totalRevenue > 0 ? '+100% since yesterday' : 'No change';
+        const diff = ((totalRevenue - yesterdayRevenue) / yesterdayRevenue) * 100;
+        return `${diff >= 0 ? '+' : ''}${Math.round(diff)}% from yesterday`;
+    }, [totalRevenue, yesterdayRevenue]);
+
+    const avgPrepTime = useMemo(() => {
+        const servedOrders = (ordersQuery.data || []).filter(o => o.status === OrderStatus.SERVED);
+        if (servedOrders.length === 0) return 'avg. prep time: --';
+        const total = servedOrders.reduce((sum, o) => sum + (new Date(o.updatedAt).getTime() - new Date(o.createdAt).getTime()), 0);
+        const mins = Math.round((total / servedOrders.length) / 60000);
+        return `avg. prep time: ${mins}m`;
+    }, [ordersQuery.data]);
+
     const pendingOrdersCount = todayOrders.filter(o => o.status === OrderStatus.PENDING).length;
 
     // Occupancy Logic
@@ -92,6 +127,8 @@ export default function DashboardPage() {
         return { occupied, reserved, available, total: tables.length };
     }, [tablesQuery.data, reservationsQuery.data]);
 
+    const activeStaff = staffQuery.data?.filter(u => u.status === 'ACTIVE').length || 0;
+
     return (
         <div className="p-6 tablet:p-10 space-y-10">
             {/* Greeting */}
@@ -108,16 +145,16 @@ export default function DashboardPage() {
                     <>
                         <StatCard 
                             title="Today's Revenue" 
-                            value={`${totalRevenue.toLocaleString()} KES`} 
+                            value={`${totalRevenue.toLocaleString()} ${currency}`} 
                             icon={TrendingUp} 
-                            trend="+12% from yesterday"
+                            trend={revenueTrend}
                             color="bg-secondary/10 text-secondary"
                         />
                         <StatCard 
                             title="Active Orders" 
                             value={pendingOrdersCount.toString()} 
                             icon={Clock} 
-                            trend="avg. prep time: 14m"
+                            trend={avgPrepTime}
                             color="bg-tertiary/10 text-tertiary"
                         />
                         <StatCard 
@@ -129,9 +166,9 @@ export default function DashboardPage() {
                         />
                         <StatCard 
                             title="Staff Active" 
-                            value={staffQuery.data?.length.toString() || '0'} 
+                            value={activeStaff.toString()} 
                             icon={Users} 
-                            trend={`${staffQuery.data?.length || 0} staff members set up`}
+                            trend={`${activeStaff} staff members active`}
                             color="bg-surface-container-highest text-on-surface-variant"
                         />
                     </>
@@ -171,7 +208,7 @@ export default function DashboardPage() {
                                             </div>
                                         </div>
                                         <div className="flex flex-col items-end gap-2">
-                                            <span className="body-md font-bold text-secondary">{order.totalAmount.toLocaleString()} KES</span>
+                                            <span className="body-md font-bold text-secondary">{order.totalAmount.toLocaleString()} {currency}</span>
                                             <span className={cn(
                                                 "pill-status",
                                                 order.status === OrderStatus.PENDING && "bg-tertiary/10 text-tertiary border border-tertiary/20",
@@ -288,7 +325,7 @@ export default function DashboardPage() {
                                     <p className="body-sm text-on-surface-variant font-medium">No reservations today</p>
                                 </div>
                             ) : (
-                                reservationsQuery.data.slice(0, 5).map((res: any) => (
+                                reservationsQuery.data.slice(0, 5).map((res: LooseValue) => (
                                     <div key={res.id} className="card-default !p-4 flex items-center gap-4 hover:border-secondary/40 transition-colors">
                                         <div className="h-12 w-12 rounded-xl bg-surface-container-high flex flex-col items-center justify-center shrink-0 border border-outline-variant/30">
                                             <span className="text-[10px] font-bold text-secondary uppercase -mb-1">
@@ -327,7 +364,7 @@ export default function DashboardPage() {
     );
 }
 
-function StatCard({ title, value, icon: Icon, trend, color }: any) {
+function StatCard({ title, value, icon: Icon, trend, color }: LooseValue) {
     return (
         <div className="card-default space-y-4 bg-surface-container-low/50 hover:bg-surface-container-low transition-all">
             <div className="flex items-center justify-between">
@@ -344,7 +381,7 @@ function StatCard({ title, value, icon: Icon, trend, color }: any) {
     );
 }
 
-function QuickActionBtn({ label, icon: Icon, onClick, color }: any) {
+function QuickActionBtn({ label, icon: Icon, onClick, color }: LooseValue) {
     return (
         <button 
             onClick={onClick}

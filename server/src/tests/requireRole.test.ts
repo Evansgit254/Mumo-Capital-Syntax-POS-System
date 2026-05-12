@@ -4,7 +4,7 @@ import { requireRole } from '../middleware/requireRole';
 import { AppError } from '../lib/errors';
 import { Role } from '@mumo/types';
 
-function createMockReqRes(user?: any) {
+function createMockReqRes(user?: LooseValue) {
     const req = { user } as Request;
     const res = {} as Response;
     return { req, res };

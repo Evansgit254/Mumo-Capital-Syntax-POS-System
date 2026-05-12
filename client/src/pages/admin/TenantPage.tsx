@@ -34,10 +34,10 @@ const TIMEZONES = [
 const DEFAULT_SETTINGS = {
     displayName: '',
     logoUrl: '',
-    primaryColor: '#008B8B',
+    primaryColor: 'var(--color-secondary)',
     currency: 'KES',
     timezone: 'Africa/Nairobi',
-    taxRate: 16.0,
+    taxRate: 0,
     outletType: 'RESTAURANT',
     operatingHours: {
         Mon: { open: '08:00', close: '22:00' },
@@ -86,13 +86,13 @@ export default function TenantPage() {
             setForm({
                 displayName: d.displayName || session.tenantName || '',
                 logoUrl: d.logoUrl || '',
-                primaryColor: d.primaryColor || '#008B8B',
+                primaryColor: d.primaryColor || 'var(--color-secondary)',
                 currency: d.currency || 'KES',
                 timezone: d.timezone || 'Africa/Nairobi',
-                taxRate: d.taxRate ?? 16.0,
+                taxRate: d.taxRate ?? 0,
                 outletType: d.outletType || 'RESTAURANT',
-                operatingHours: d.operatingHours || DEFAULT_SETTINGS.operatingHours,
-                receiptConfig: d.receiptConfig || DEFAULT_SETTINGS.receiptConfig,
+                operatingHours: d.operatingHours as typeof DEFAULT_SETTINGS.operatingHours || DEFAULT_SETTINGS.operatingHours,
+                receiptConfig: d.receiptConfig as typeof DEFAULT_SETTINGS.receiptConfig || DEFAULT_SETTINGS.receiptConfig,
             });
         }
     }, [settingsQuery.data, session.tenantName]);
@@ -103,8 +103,8 @@ export default function TenantPage() {
         if (form.displayName.length > 100) errs.displayName = 'Max 100 characters';
         if (form.logoUrl && !/^https?:\/\/.+/i.test(form.logoUrl))
             errs.logoUrl = 'Must be a valid URL starting with http:// or https://';
-        if (!/^#[0-9a-fA-F]{6}$/.test(form.primaryColor))
-            errs.primaryColor = 'Must be a valid hex color (e.g. #008B8B)';
+        if (!/^#[0-9a-fA-F]{6}$/.test(form.primaryColor) && !/^var\(--[a-z0-9-]+\)$/.test(form.primaryColor))
+            errs.primaryColor = 'Must be a valid theme color token or hex color';
         if (!form.currency.trim()) errs.currency = 'Currency is required';
         if (form.currency.length > 5) errs.currency = 'Max 5 characters';
         if (isNaN(form.taxRate) || form.taxRate < 0 || form.taxRate > 100)
@@ -118,14 +118,14 @@ export default function TenantPage() {
         onMutate: async (data) => {
             await queryClient.cancelQueries({ queryKey: ['tenant-settings'] });
             const previous = queryClient.getQueryData(['tenant-settings']);
-            queryClient.setQueryData(['tenant-settings'], (old: any) => ({ ...old, ...data }));
+            queryClient.setQueryData(['tenant-settings'], (old: LooseValue) => ({ ...old, ...data }));
             applyPrimaryColor(data.primaryColor);
             return { previous };
         },
         onError: (err, _vars, context) => {
             queryClient.setQueryData(['tenant-settings'], context?.previous);
             if (context?.previous) {
-                applyPrimaryColor((context.previous as any).primaryColor || '#008B8B');
+                applyPrimaryColor((context.previous as any).primaryColor || 'var(--color-secondary)');
             }
             showToast(getErrorMessage(err), 'error');
         },
@@ -158,7 +158,7 @@ export default function TenantPage() {
     const handleColorChange = (color: string) => {
         setForm(f => ({ ...f, primaryColor: color }));
         setDirty(true);
-        if (/^#[0-9a-fA-F]{6}$/.test(color)) {
+        if (/^#[0-9a-fA-F]{6}$/.test(color) || /^var\(--[a-z0-9-]+\)$/.test(color)) {
             applyPrimaryColor(color);
         }
     };
@@ -169,13 +169,13 @@ export default function TenantPage() {
         saveMutation.mutate(form);
     };
 
-    const updateField = (key: string, value: any) => {
+    const updateField = (key: string, value: LooseValue) => {
         setForm(f => ({ ...f, [key]: value }));
         setDirty(true);
         if (errors[key]) setErrors(e => ({ ...e, [key]: '' }));
     };
 
-    const cn = (...inputs: any[]) => inputs.filter(Boolean).join(' ');
+    const cn = (...inputs: LooseValue[]) => inputs.filter(Boolean).join(' ');
 
     return (
         <div className="p-6 tablet:p-10 space-y-8 max-w-3xl">
@@ -299,7 +299,7 @@ export default function TenantPage() {
                                         <input value={form.currency} onChange={e => updateField('currency', e.target.value)} className="input-field" />
                                     </FormField>
                                     <FormField label="Tax Rate %" error={errors.taxRate}>
-                                        <input type="number" value={form.taxRate} onChange={e => updateField('taxRate', parseFloat(e.target.value))} className="input-field" />
+                                        <input type="number" step="0.01" value={form.taxRate || ''} onChange={e => updateField('taxRate', parseFloat(e.target.value) || 0)} className="input-field" />
                                     </FormField>
                                     <FormField label="System Timezone">
                                         <select value={form.timezone} onChange={e => updateField('timezone', e.target.value)} className="input-field text-sm">

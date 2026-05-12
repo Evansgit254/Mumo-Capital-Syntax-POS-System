@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { z } from 'zod';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
+import { logger } from '../lib/logger';
 import { authenticate } from '../middleware/auth';
 import { requireRole } from '../middleware/requireRole';
 import { Role } from '@mumo/types';
@@ -32,7 +34,7 @@ router.get('/', requireRole(Role.TENANT_ADMIN, Role.MANAGER), async (req, res) =
         const tenantId = req.user!.tenantId;
         const { start, end } = req.query; // YYYY-MM-DD strings
 
-        let dateFilter: any = {};
+        let dateFilter: Prisma.DateTimeFilter = {};
         if (start && end) {
             dateFilter = {
                 gte: new Date(start as string),
@@ -69,7 +71,7 @@ router.get('/', requireRole(Role.TENANT_ADMIN, Role.MANAGER), async (req, res) =
             } : undefined
         })));
     } catch (error) {
-        console.error('Error fetching shifts:', error);
+        logger.error({ err: error }, 'Error fetching shifts');
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -113,7 +115,7 @@ router.post('/', requireRole(Role.TENANT_ADMIN, Role.MANAGER), async (req, res) 
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: error.errors[0].message });
         }
-        console.error('Error creating shift:', error);
+        logger.error({ err: error }, 'Error creating shift');
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -134,7 +136,7 @@ router.put('/:id', requireRole(Role.TENANT_ADMIN, Role.MANAGER), async (req, res
             return res.status(404).json({ error: 'Shift not found' });
         }
 
-        const updateData: any = {};
+        const updateData: Prisma.ShiftUpdateInput = {};
         if (data.startTime) updateData.startTime = new Date(data.startTime);
         if (data.endTime) updateData.endTime = new Date(data.endTime);
         if (data.station) updateData.station = data.station;
@@ -166,7 +168,7 @@ router.put('/:id', requireRole(Role.TENANT_ADMIN, Role.MANAGER), async (req, res
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: error.errors[0].message });
         }
-        console.error('Error updating shift:', error);
+        logger.error({ err: error }, 'Error updating shift');
         res.status(500).json({ error: 'Internal server error' });
     }
 });
@@ -192,7 +194,7 @@ router.delete('/:id', requireRole(Role.TENANT_ADMIN, Role.MANAGER), async (req, 
 
         res.status(204).send();
     } catch (error) {
-        console.error('Error deleting shift:', error);
+        logger.error({ err: error }, 'Error deleting shift');
         res.status(500).json({ error: 'Internal server error' });
     }
 });

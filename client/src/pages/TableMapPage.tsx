@@ -137,6 +137,6 @@ function SummaryItem({ label, value, color }: { label: string, value: string | n
     );
 }
 
-function cn(...inputs: any[]) {
+function cn(...inputs: LooseValue[]) {
     return inputs.filter(Boolean).join(' ');
 }

@@ -150,7 +150,7 @@ export default function TableDetailsPage() {
                         <div className="space-y-6">
                             <h2 className="label-sm text-on-surface-variant tracking-widest">CURRENT ITEMS</h2>
                             <div className="space-y-4">
-                                {activeOrders.flatMap(o => o.items).map((item: any, idx) => (
+                                {activeOrders.flatMap(o => o.items).map((item: LooseValue, idx) => (
                                     <div key={idx} className="card-default !p-4 flex items-center gap-4 hover:border-outline transition-colors group">
                                         <div className="h-10 w-10 rounded-lg bg-surface-container-highest flex items-center justify-center font-black text-secondary">
                                             {item.quantity}

@@ -283,8 +283,8 @@ export default function SettingsPage() {
                         }`}
                         id="theme-dark-btn"
                     >
-                        <div className="h-16 w-full rounded-lg bg-[#121414] border border-[#444748] flex items-center justify-center">
-                            <Moon size={20} className="text-[#c4c7c7]" />
+                        <div className="h-16 w-full rounded-lg bg-[var(--surface)] border border-[var(--outline-variant)] flex items-center justify-center">
+                            <Moon size={20} className="text-[var(--on-surface-variant)]" />
                         </div>
                         <span className="label-sm text-on-surface-variant">Dark</span>
                     </button>
@@ -301,8 +301,8 @@ export default function SettingsPage() {
                         }`}
                         id="theme-light-btn"
                     >
-                        <div className="h-16 w-full rounded-lg bg-[#f5f5f5] border border-[#d0d0d0] flex items-center justify-center">
-                            <Sun size={20} className="text-[#444]" />
+                        <div className="h-16 w-full rounded-lg bg-[var(--inverse-surface)] border border-[var(--on-surface-variant)] flex items-center justify-center">
+                            <Sun size={20} className="text-[var(--on-surface-variant)]" />
                         </div>
                         <span className="label-sm text-on-surface-variant">Light</span>
                     </button>

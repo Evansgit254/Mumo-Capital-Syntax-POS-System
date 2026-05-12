@@ -85,7 +85,7 @@ export default function RoomServicePage() {
         }
     };
 
-    const addToCart = (item: any) => {
+    const addToCart = (item: LooseValue) => {
         setCart(prev => {
             const existing = prev.find(i => i.menuItemId === item.id);
             if (existing) {

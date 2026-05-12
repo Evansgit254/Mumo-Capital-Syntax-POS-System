@@ -150,7 +150,7 @@ router.post(
                     vendorId,
                     totalCost,
                     items: {
-                        create: items.map((item: any) => ({
+                        create: items.map((item: LooseValue) => ({
                             inventoryItemId: item.inventoryItemId,
                             orderedQty: new Prisma.Decimal(item.orderedQty),
                             unitCost: new Prisma.Decimal(item.unitCost),
@@ -192,88 +192,65 @@ router.patch(
             // If marking as RECEIVED, handle inventory updates
             if (status === 'RECEIVED' && order.status !== 'RECEIVED') {
                 await prisma.$transaction(async (tx) => {
-                    // Update main PO status
-                    await tx.purchaseOrder.update({
-                        where: { id: order.id },
-                        data: { status: 'RECEIVED' }
-                    });
-
-                    // Fetch PO items
                     const poItems = await tx.purchaseOrderItem.findMany({
                         where: { purchaseOrderId: order.id }
                     });
 
-                    // Process each item received
                     if (receivedItems && receivedItems.length > 0) {
                         for (const receipt of receivedItems) {
                             const poItem = poItems.find(i => i.inventoryItemId === receipt.inventoryItemId);
-                            const item = await tx.inventoryItem.findUnique({
-                                where: { id: receipt.inventoryItemId }
-                            });
-
-                            if (item && poItem) {
-                                const receivedQtyDecimal = new Prisma.Decimal(receipt.receivedQty);
-                                const newQty = item.currentStock.plus(receivedQtyDecimal);
-                                
-                                // Update stock
-                                await tx.inventoryItem.update({
-                                    where: { id: item.id },
-                                    data: { currentStock: newQty }
-                                });
-
-                                // Update PO Item received qty
+                            if (poItem) {
                                 await tx.purchaseOrderItem.update({
                                     where: { id: poItem.id },
-                                    data: { receivedQty: receivedQtyDecimal }
-                                });
-
-                                // Create Audit Log
-                                await tx.inventoryAuditLog.create({
-                                    data: {
-                                        inventoryItemId: item.id,
-                                        userId,
-                                        previousQty: item.currentStock,
-                                        newQty,
-                                        adjustmentType: 'PURCHASE',
-                                        reason: receipt.reason || `Received via PO-${order.id.substring(0, 8)}`,
-                                        tenantId
-                                    }
+                                    data: { receivedQty: new Prisma.Decimal(receipt.receivedQty) }
                                 });
                             }
                         }
                     } else {
-                        // Fallback: Use original PO item quantities if none provided
                         for (const poItem of poItems) {
-                            const item = await tx.inventoryItem.findUnique({
-                                where: { id: poItem.inventoryItemId }
+                            await tx.purchaseOrderItem.update({
+                                where: { id: poItem.id },
+                                data: { receivedQty: poItem.receivedQty ?? poItem.orderedQty }
                             });
-                            if (item) {
-                                const newQty = item.currentStock.plus(poItem.orderedQty);
-                                
-                                await tx.inventoryItem.update({
-                                    where: { id: item.id },
-                                    data: { currentStock: newQty }
-                                });
-
-                                await tx.purchaseOrderItem.update({
-                                    where: { id: poItem.id },
-                                    data: { receivedQty: poItem.orderedQty }
-                                });
-
-                                await tx.inventoryAuditLog.create({
-                                    data: {
-                                        inventoryItemId: item.id,
-                                        userId,
-                                        previousQty: item.currentStock,
-                                        newQty,
-                                        adjustmentType: 'PURCHASE',
-                                        reason: `Received via PO-${order.id.substring(0, 8)}`,
-                                        tenantId
-                                    }
-                                });
-                            }
                         }
                     }
+
+                    const receivedPoItems = await tx.purchaseOrderItem.findMany({
+                        where: { purchaseOrderId: order.id },
+                    });
+
+                    for (const poItem of receivedPoItems) {
+                        if (!poItem.receivedQty || poItem.receivedQty.isZero()) continue;
+
+                        const item = await tx.inventoryItem.findUnique({
+                            where: { id: poItem.inventoryItemId }
+                        });
+                        if (!item) continue;
+
+                        const newQty = item.currentStock.plus(poItem.receivedQty);
+
+                        await tx.inventoryItem.update({
+                            where: { id: item.id },
+                            data: { currentStock: newQty }
+                        });
+
+                        await tx.inventoryAuditLog.create({
+                            data: {
+                                inventoryItemId: item.id,
+                                userId,
+                                previousQty: item.currentStock,
+                                newQty,
+                                adjustmentType: 'PURCHASE',
+                                reason: `Received via PO-${order.id.substring(0, 8)}`,
+                                tenantId
+                            }
+                        });
+                    }
+
+                    await tx.purchaseOrder.update({
+                        where: { id: order.id },
+                        data: { status: 'RECEIVED' }
+                    });
                 });
                 return res.json({ message: 'Purchase Order received and inventory updated' });
             }

@@ -4,7 +4,7 @@ import { prisma } from '../lib/prisma';
 import { notFound, badRequest } from '../lib/errors';
 import { validate } from '../middleware/validate';
 import { requireRole } from '../middleware/requireRole';
-import { createPaymentSchema, updatePaymentStatusSchema } from '../validators/payment';
+import { createFolioPaymentSchema, createPaymentSchema, updatePaymentStatusSchema } from '../validators/payment';
 import { Role, PaymentStatus } from '@mumo/types';
 
 const router = Router();
@@ -31,6 +31,65 @@ router.get(
                     totalAmount: p.order.totalAmount.toNumber()
                 } : undefined
             })));
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+// ── POST /api/payments/folio ────────────────────────────────────────────────
+router.post(
+    '/folio',
+    requireRole(Role.STAFF, Role.MANAGER, Role.TENANT_ADMIN, Role.SUPER_ADMIN),
+    validate(createFolioPaymentSchema),
+    async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const { tenantId } = req.user!;
+            const { roomId, charges } = req.body;
+            const orderIds = charges.map((charge: { orderId: string }) => charge.orderId);
+
+            const room = await prisma.table.findFirst({
+                where: { id: roomId, tenantId },
+            });
+            if (!room) throw notFound('Room not found in this tenant');
+
+            const orders = await prisma.order.findMany({
+                where: { id: { in: orderIds }, tenantId },
+                select: { id: true },
+            });
+            if (orders.length !== new Set(orderIds).size) {
+                throw badRequest('One or more orders do not belong to this tenant');
+            }
+
+            const result = await prisma.$transaction(async (tx) => {
+                const payments = await Promise.all(charges.map((charge: { orderId: string; amount: number; method: 'CASH' | 'CARD' }) =>
+                    tx.payment.create({
+                        data: {
+                            tenantId,
+                            orderId: charge.orderId,
+                            amount: new Prisma.Decimal(charge.amount),
+                            method: charge.method,
+                            status: PaymentStatus.COMPLETED,
+                        },
+                    })
+                ));
+
+                const totalSettled = payments.reduce(
+                    (sum, payment) => sum.plus(payment.amount),
+                    new Prisma.Decimal(0)
+                );
+
+                return {
+                    folioId: `folio_${roomId}_${Date.now()}`,
+                    totalSettled: totalSettled.toNumber(),
+                    payments: payments.map(payment => ({
+                        ...payment,
+                        amount: payment.amount.toNumber(),
+                    })),
+                };
+            });
+
+            res.json(result);
         } catch (err) {
             next(err);
         }

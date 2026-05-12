@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { cn } from '../../lib/utils';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
     Search, 
@@ -12,20 +13,34 @@ import {
     Filter,
     ArrowUpRight,
     ArrowDownRight,
-    Package
+    Package,
+    X,
+    Loader2,
+    Edit2,
+    Trash2,
+    Minus,
+    ArrowRight
 } from 'lucide-react';
+import { InventoryItem } from '@mumo/types';
 import { inventoryService, getErrorMessage } from '../../api/service';
 import { useStore } from '../../store/useStore';
 import Skeleton from '../../components/ui/Skeleton';
 import { toast } from 'react-hot-toast';
 import { format } from 'date-fns';
+import { downloadCSV } from '../../lib/exportCsv';
+import { useNavigate } from 'react-router-dom';
 
 const InventoryPage: React.FC = () => {
     const queryClient = useQueryClient();
+    const navigate = useNavigate();
     const { session } = useStore();
     const [searchQuery, setSearchQuery] = useState('');
     const [filterAlerts, setFilterAlerts] = useState(false);
     const [activeTab, setActiveTab] = useState<'stock' | 'audit'>('stock');
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [editingItem, setEditingItem] = useState<InventoryItem | null>(null);
+    const [adjustingItem, setAdjustingItem] = useState<InventoryItem | null>(null);
+    const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
     const { data: items, isLoading: itemsLoading } = useQuery({
         queryKey: ['inventory', filterAlerts],
@@ -77,15 +92,26 @@ const InventoryPage: React.FC = () => {
         );
     }
 
+    const handleDelete = async (id: string) => {
+        if (!window.confirm('Are you sure you want to delete this item?')) return;
+        try {
+            await inventoryService.delete(id);
+            toast.success('Item deleted');
+            queryClient.invalidateQueries({ queryKey: ['inventory'] });
+        } catch (err) {
+            toast.error(getErrorMessage(err));
+        }
+    };
+
     return (
-        <div className="p-6 tablet:p-10 space-y-10">
+        <div className="p-6 tablet:p-10 space-y-10" onClick={() => setOpenMenuId(null)}>
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div className="space-y-1">
                     <h1 className="display-lg text-on-surface">Inventory & Stock</h1>
                     <p className="body-lg text-on-surface-variant">Manage supplies and monitor stock levels across {session.tenantName}.</p>
                 </div>
-                <button className="btn-primary flex items-center gap-2 group self-start md:self-center">
+                <button onClick={() => setShowAddModal(true)} className="btn-primary flex items-center gap-2 group self-start md:self-center">
                     <Plus size={20} className="group-hover:rotate-90 transition-transform duration-300" />
                     New Item
                 </button>
@@ -140,7 +166,7 @@ const InventoryPage: React.FC = () => {
             </div>
 
             {/* Main Content */}
-            <div className="card-default overflow-hidden flex flex-col">
+            <div className="card-default flex flex-col">
                 {/* Tabs */}
                 <div className="flex border-b border-outline-variant px-6 bg-surface-container-low">
                     <button 
@@ -187,10 +213,32 @@ const InventoryPage: React.FC = () => {
                                     <AlertTriangle size={16} />
                                     Alerts Only
                                 </button>
-                                <button className="p-3 rounded-xl bg-surface-container-lowest border border-outline-variant text-on-surface-variant hover:border-outline transition-colors">
+                                <button 
+                                    onClick={() => setFilterAlerts(!filterAlerts)}
+                                    className="p-3 rounded-xl bg-surface-container-lowest border border-outline-variant text-on-surface-variant hover:border-outline transition-colors"
+                                    title="Toggle filter"
+                                >
                                     <Filter size={18} />
                                 </button>
-                                <button className="p-3 rounded-xl bg-surface-container-lowest border border-outline-variant text-on-surface-variant hover:border-outline transition-colors">
+                                <button 
+                                    onClick={() => {
+                                        if (!items || items.length === 0) { toast.error('No inventory data to export'); return; }
+                                        const date = new Date().toISOString().split('T')[0];
+                                        downloadCSV(`mumo-inventory-${date}.csv`, [{
+                                            header: 'Inventory Stock',
+                                            rows: items.map(i => ({
+                                                Name: i.name, SKU: i.sku || 'N/A', Unit: i.unit,
+                                                'Current Stock': i.currentStock, 'Min Stock': i.minStock,
+                                                'Cost/Unit (KES)': i.costPerUnit || 0,
+                                                'Value (KES)': i.currentStock * (i.costPerUnit || 0),
+                                                Status: i.currentStock < i.minStock ? 'LOW STOCK' : 'OK'
+                                            }))
+                                        }]);
+                                        toast.success('Inventory exported successfully');
+                                    }}
+                                    className="p-3 rounded-xl bg-surface-container-lowest border border-outline-variant text-on-surface-variant hover:border-outline transition-colors"
+                                    title="Export CSV"
+                                >
                                     <FileDown size={18} />
                                 </button>
                             </div>
@@ -249,13 +297,60 @@ const InventoryPage: React.FC = () => {
                                             </div>
                                         </div>
 
-                                        <div className="flex items-center justify-end gap-2">
-                                            <button className="p-2 rounded-lg hover:bg-primary/10 hover:text-primary text-on-surface-variant transition-colors">
+                                        <div className="flex items-center justify-end gap-2 relative">
+                                            <button 
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setActiveTab('audit');
+                                                }} 
+                                                className="p-2 rounded-lg hover:bg-primary/10 hover:text-primary text-on-surface-variant transition-colors" 
+                                                title="View audit log"
+                                            >
                                                 <History size={18} />
                                             </button>
-                                            <button className="p-2 rounded-lg hover:bg-surface-container-high text-on-surface-variant transition-colors">
-                                                <MoreVertical size={18} />
-                                            </button>
+                                            
+                                            <div className="relative">
+                                                <button 
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setOpenMenuId(openMenuId === item.id ? null : item.id);
+                                                    }} 
+                                                    className={cn(
+                                                        "p-2 rounded-lg transition-colors",
+                                                        openMenuId === item.id ? "bg-primary text-on-primary" : "hover:bg-surface-container-high text-on-surface-variant"
+                                                    )}
+                                                    title="Actions"
+                                                >
+                                                    <MoreVertical size={18} />
+                                                </button>
+
+                                                {openMenuId === item.id && (
+                                                    <div className="absolute right-0 mt-2 w-48 bg-surface-container-high border border-outline-variant rounded-xl shadow-2xl z-[50] py-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                                                        <button 
+                                                            onClick={() => setAdjustingItem(item)}
+                                                            className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-white/5 transition-colors text-sm font-medium"
+                                                        >
+                                                            <Plus size={16} className="text-secondary" />
+                                                            Adjust Stock
+                                                        </button>
+                                                        <button 
+                                                            onClick={() => setEditingItem(item)}
+                                                            className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-white/5 transition-colors text-sm font-medium"
+                                                        >
+                                                            <Edit2 size={16} className="text-primary" />
+                                                            Edit Details
+                                                        </button>
+                                                        <div className="my-1 border-t border-outline-variant" />
+                                                        <button 
+                                                            onClick={() => handleDelete(item.id)}
+                                                            className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-error/10 text-error transition-colors text-sm font-medium"
+                                                        >
+                                                            <Trash2 size={16} />
+                                                            Delete Item
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 ))
@@ -280,8 +375,8 @@ const InventoryPage: React.FC = () => {
                             <div className="text-center">Reason</div>
                             <div className="text-right">Date/Time</div>
                         </div>
-                        {auditData?.logs?.length > 0 ? (
-                            auditData.logs.map((log: any) => {
+                        {(auditData?.logs?.length ?? 0) > 0 ? (
+                            auditData!.logs.map((log) => {
                                 const diff = log.newQty - log.previousQty;
                                 const isPositive = diff > 0;
                                 return (
@@ -337,12 +432,284 @@ const InventoryPage: React.FC = () => {
                         <p className="body-md text-on-surface-variant">Based on last week's consumption, you will run out of Tomatoes by Thursday.</p>
                     </div>
                 </div>
-                <button className="btn-secondary whitespace-nowrap bg-surface-container-lowest">
+                <button onClick={() => navigate('/vendors')} className="btn-secondary whitespace-nowrap bg-surface-container-lowest">
                     Order Refill
                 </button>
             </div>
+
+            {/* New/Edit Item Modal */}
+            {(showAddModal || editingItem) && (
+                <div className="fixed inset-0 bg-surface/90 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <InventoryItemForm
+                        initialData={editingItem || undefined}
+                        onClose={() => {
+                            setShowAddModal(false);
+                            setEditingItem(null);
+                        }}
+                        onSuccess={() => {
+                            setShowAddModal(false);
+                            setEditingItem(null);
+                            queryClient.invalidateQueries({ queryKey: ['inventory'] });
+                        }}
+                    />
+                </div>
+            )}
+
+            {/* Adjustment Modal */}
+            {adjustingItem && (
+                <div className="fixed inset-0 bg-surface/90 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <StockAdjustmentForm
+                        item={adjustingItem}
+                        onClose={() => setAdjustingItem(null)}
+                        onSuccess={() => {
+                            setAdjustingItem(null);
+                            queryClient.invalidateQueries({ queryKey: ['inventory'] });
+                            queryClient.invalidateQueries({ queryKey: ['inventory-audit'] });
+                        }}
+                    />
+                </div>
+            )}
         </div>
     );
 };
+
+// ── Inventory Item Form (Create & Edit) ───────────────────────────────────
+function InventoryItemForm({ initialData, onClose, onSuccess }: { initialData?: InventoryItem; onClose: () => void; onSuccess: () => void }) {
+    const [form, setForm] = useState({
+        name: initialData?.name || '',
+        sku: initialData?.sku || '',
+        unit: initialData?.unit || 'kg',
+        currentStock: initialData?.currentStock || 0,
+        minStock: initialData?.minStock || 0,
+        costPerUnit: initialData?.costPerUnit || 0,
+    });
+    const [errors, setErrors] = useState<Record<string, string>>({});
+
+    const mutation = useMutation({
+        mutationFn: (data: Partial<Omit<InventoryItem, 'id' | 'tenantId' | 'createdAt' | 'updatedAt'>>) => initialData 
+            ? inventoryService.update(initialData.id, data)
+            : inventoryService.create(data),
+        onSuccess: () => {
+            toast.success(initialData ? 'Item updated' : 'Item created');
+            onSuccess();
+        },
+        onError: (err) => toast.error(getErrorMessage(err)),
+    });
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        const errs: Record<string, string> = {};
+        if (!form.name.trim()) errs.name = 'Name is required';
+        if (!form.unit.trim()) errs.unit = 'Unit is required';
+        if (form.costPerUnit < 0) errs.costPerUnit = 'Cost cannot be negative';
+
+        if (Object.keys(errs).length > 0) {
+            setErrors(errs);
+            return;
+        }
+        mutation.mutate(form);
+    };
+
+    return (
+        <div className="w-full max-w-lg card-default shadow-2xl animate-in zoom-in-95 duration-300" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-8">
+                <h2 className="headline-md">{initialData ? 'Edit Item' : 'New Inventory Item'}</h2>
+                <button onClick={onClose} className="h-10 w-10 rounded-xl hover:bg-white/5 flex items-center justify-center">
+                    <X size={24} />
+                </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="space-y-2">
+                    <label className="label-sm text-on-surface-variant">Item Name</label>
+                    <input
+                        type="text"
+                        value={form.name}
+                        onChange={e => setForm({ ...form, name: e.target.value })}
+                        className={cn('input-field', errors.name && 'border-error focus:ring-error/20')}
+                        placeholder="e.g. Olive Oil"
+                    />
+                    {errors.name && <p className="text-xs text-error">{errors.name}</p>}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <label className="label-sm text-on-surface-variant">SKU (optional)</label>
+                        <input
+                            type="text"
+                            value={form.sku}
+                            onChange={e => setForm({ ...form, sku: e.target.value })}
+                            className="input-field"
+                            placeholder="e.g. OIL-001"
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="label-sm text-on-surface-variant">Unit</label>
+                        <select
+                            value={form.unit}
+                            onChange={e => setForm({ ...form, unit: e.target.value })}
+                            className={cn('input-field cursor-pointer', errors.unit && 'border-error focus:ring-error/20')}
+                        >
+                            {['kg', 'g', 'ltr', 'ml', 'pcs', 'box', 'bag', 'bottle'].map(u => (
+                                <option key={u} value={u}>{u}</option>
+                            ))}
+                        </select>
+                        {errors.unit && <p className="text-xs text-error">{errors.unit}</p>}
+                    </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-4">
+                    <div className="space-y-2">
+                        <label className="label-sm text-on-surface-variant">Current Stock</label>
+                        <input
+                            type="number"
+                            value={form.currentStock}
+                            onChange={e => setForm({ ...form, currentStock: parseFloat(e.target.value) || 0 })}
+                            className="input-field"
+                            min={0}
+                            disabled={!!initialData}
+                        />
+                        {initialData && <p className="text-[10px] text-on-surface-variant italic">Use 'Adjust' for changes</p>}
+                    </div>
+                    <div className="space-y-2">
+                        <label className="label-sm text-on-surface-variant">Min Stock</label>
+                        <input
+                            type="number"
+                            value={form.minStock}
+                            onChange={e => setForm({ ...form, minStock: parseFloat(e.target.value) || 0 })}
+                            className="input-field"
+                            min={0}
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <label className="label-sm text-on-surface-variant">Cost / Unit (KES)</label>
+                        <input
+                            type="number"
+                            value={form.costPerUnit}
+                            onChange={e => setForm({ ...form, costPerUnit: parseFloat(e.target.value) || 0 })}
+                            className={cn('input-field', errors.costPerUnit && 'border-error focus:ring-error/20')}
+                            min={0}
+                        />
+                        {errors.costPerUnit && <p className="text-xs text-error">{errors.costPerUnit}</p>}
+                    </div>
+                </div>
+
+                <div className="flex gap-3 justify-end pt-4">
+                    <button type="button" onClick={onClose} className="btn-secondary !h-12">Cancel</button>
+                    <button
+                        type="submit"
+                        disabled={mutation.isPending}
+                        className="btn-primary !h-12 !px-10"
+                    >
+                        {mutation.isPending ? <Loader2 className="animate-spin" size={20} /> : initialData ? 'Save Changes' : 'Create Item'}
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
+}
+
+// ── Stock Adjustment Form ──────────────────────────────────────────────────
+function StockAdjustmentForm({ item, onClose, onSuccess }: { item: InventoryItem; onClose: () => void; onSuccess: () => void }) {
+    const [form, setForm] = useState({
+        quantity: 0,
+        type: 'PURCHASE',
+        reason: '',
+    });
+
+    const mutation = useMutation({
+        mutationFn: (data: { quantity: number; type: string; reason: string }) => inventoryService.adjust(item.id, data),
+        onSuccess: () => {
+            toast.success('Stock adjusted');
+            onSuccess();
+        },
+        onError: (err) => toast.error(getErrorMessage(err)),
+    });
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (form.quantity === 0) {
+            toast.error('Quantity cannot be zero');
+            return;
+        }
+        mutation.mutate(form);
+    };
+
+    return (
+        <div className="w-full max-w-md card-default shadow-2xl animate-in zoom-in-95 duration-300" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-8">
+                <div>
+                    <h2 className="headline-md">Adjust Stock</h2>
+                    <p className="body-sm text-on-surface-variant">{item.name}</p>
+                </div>
+                <button onClick={onClose} className="h-10 w-10 rounded-xl hover:bg-white/5 flex items-center justify-center">
+                    <X size={24} />
+                </button>
+            </div>
+
+            <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <label className="label-sm text-on-surface-variant">Adjustment Type</label>
+                        <select
+                            value={form.type}
+                            onChange={e => setForm({ ...form, type: e.target.value })}
+                            className="input-field cursor-pointer"
+                        >
+                            <option value="PURCHASE">Purchase (+)</option>
+                            <option value="RECOUNT">Recount (±)</option>
+                            <option value="WASTAGE">Wastage (-)</option>
+                            <option value="USAGE">Manual Usage (-)</option>
+                            <option value="SALE">Sale Correction (-)</option>
+                        </select>
+                    </div>
+                    <div className="space-y-2">
+                        <label className="label-sm text-on-surface-variant">Quantity (+/-)</label>
+                        <div className="relative">
+                            <input
+                                type="number"
+                                value={form.quantity}
+                                onChange={e => setForm({ ...form, quantity: parseFloat(e.target.value) || 0 })}
+                                className="input-field pr-12 text-center text-lg font-bold"
+                                step="0.1"
+                            />
+                            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant label-sm">{item.unit}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="space-y-2">
+                    <label className="label-sm text-on-surface-variant">Reason / Notes</label>
+                    <textarea
+                        value={form.reason}
+                        onChange={e => setForm({ ...form, reason: e.target.value })}
+                        className="input-field min-h-[100px] py-3"
+                        placeholder="Why are you making this adjustment?"
+                    />
+                </div>
+
+                <div className="bg-surface-container-high rounded-xl p-4 flex items-center justify-between border border-outline-variant">
+                    <span className="label-sm text-on-surface-variant font-bold uppercase tracking-wider">New Balance</span>
+                    <div className="flex items-center gap-2">
+                        <span className="body-lg text-on-surface-variant line-through opacity-50">{item.currentStock}</span>
+                        <ArrowRight size={16} className="text-on-surface-variant" />
+                        <span className="display-sm text-primary">{Math.max(0, item.currentStock + form.quantity).toFixed(2)} {item.unit}</span>
+                    </div>
+                </div>
+
+                <div className="flex gap-3 justify-end pt-4">
+                    <button type="button" onClick={onClose} className="btn-secondary !h-12">Cancel</button>
+                    <button
+                        type="submit"
+                        disabled={mutation.isPending}
+                        className="btn-primary !h-12 !px-10"
+                    >
+                        {mutation.isPending ? <Loader2 className="animate-spin" size={20} /> : 'Save Adjustment'}
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
+}
 
 export default InventoryPage;

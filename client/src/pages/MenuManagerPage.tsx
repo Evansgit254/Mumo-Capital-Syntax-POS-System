@@ -1,4 +1,6 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import toast from 'react-hot-toast';
+import { getErrorMessage } from '../api/service';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { menuService } from '../api/service';
 import { useStore } from '../store/useStore';
@@ -24,6 +26,8 @@ export default function MenuManagerPage() {
     const [searchQuery, setSearchQuery] = useState('');
     const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
     const [isAdding, setIsAdding] = useState(false);
+    const [page, setPage] = useState(0);
+    const PAGE_SIZE = 15;
 
     // Role guard
     if (session.role !== 'TENANT_ADMIN' && session.role !== 'MANAGER') {
@@ -38,12 +42,22 @@ export default function MenuManagerPage() {
     const deleteMutation = useMutation({
         mutationFn: menuService.delete,
         onSuccess: () => queryClient.invalidateQueries({ queryKey: ['menus'] }),
+        onError: (err) => toast.error(getErrorMessage(err)),
     });
 
     const filteredItems = menuQuery.data?.filter(item => 
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.categoryId?.toLowerCase().includes(searchQuery.toLowerCase())
     );
+
+    const totalPages = Math.ceil((filteredItems?.length || 0) / PAGE_SIZE);
+    const paginatedItems = filteredItems?.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
+
+    const categories = useMemo(() => {
+        const base = ['GENERAL', 'STARTER', 'MAIN', 'DESSERT', 'DRINK'];
+        const existing = menuQuery.data?.map(i => i.categoryId).filter(Boolean) as string[] || [];
+        return Array.from(new Set([...base, ...existing]));
+    }, [menuQuery.data]);
 
     return (
         <div className="p-8 tablet:p-10 space-y-8 min-h-full">
@@ -102,7 +116,7 @@ export default function MenuManagerPage() {
                                 </td>
                             </tr>
                         ) : (
-                            filteredItems?.map(item => (
+                            paginatedItems?.map(item => (
                                 <tr key={item.id} className="hover:bg-white/[0.02] transition-colors group">
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-4">
@@ -167,8 +181,19 @@ export default function MenuManagerPage() {
                     Showing {filteredItems?.length || 0} of {menuQuery.data?.length || 0} total items
                 </span>
                 <div className="flex gap-2">
-                    <button className="btn-secondary !h-[40px] !px-4 !text-xs !bg-surface-container-low">Previous</button>
-                    <button className="btn-secondary !h-[40px] !px-4 !text-xs !bg-surface-container-low">Next</button>
+                    <button 
+                        onClick={() => setPage(p => Math.max(0, p - 1))}
+                        disabled={page === 0}
+                        className="btn-secondary !h-[40px] !px-4 !text-xs !bg-surface-container-low disabled:opacity-30"
+                    >Previous</button>
+                    <span className="flex items-center px-3 text-xs text-on-surface-variant font-bold">
+                        {totalPages > 0 ? `${page + 1} / ${totalPages}` : '—'}
+                    </span>
+                    <button 
+                        onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
+                        disabled={page >= totalPages - 1}
+                        className="btn-secondary !h-[40px] !px-4 !text-xs !bg-surface-container-low disabled:opacity-30"
+                    >Next</button>
                 </div>
             </div>
 
@@ -177,6 +202,7 @@ export default function MenuManagerPage() {
                 <div className="fixed inset-0 bg-surface/90 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
                     <MenuItemForm 
                         initialData={editingItem || undefined}
+                        categories={categories}
                         onClose={() => { setIsAdding(false); setEditingItem(null); }} 
                         onSuccess={() => {
                             setIsAdding(false);
@@ -190,7 +216,7 @@ export default function MenuManagerPage() {
     );
 }
 
-function MenuItemForm({ onClose, onSuccess, initialData }: { onClose: () => void, onSuccess: () => void, initialData?: MenuItem }) {
+function MenuItemForm({ onClose, onSuccess, initialData, categories }: { onClose: () => void, onSuccess: () => void, initialData?: MenuItem, categories: string[] }) {
     const [form, setForm] = useState({
         name: initialData?.name || '',
         description: initialData?.description || '',
@@ -201,10 +227,11 @@ function MenuItemForm({ onClose, onSuccess, initialData }: { onClose: () => void
     const [errors, setErrors] = useState<Record<string, string>>({});
 
     const mutation = useMutation({
-        mutationFn: (data: any) => initialData 
+        mutationFn: (data: LooseValue) => initialData 
             ? menuService.update(initialData.id, data) 
             : menuService.create(data),
         onSuccess,
+        onError: (err) => toast.error(getErrorMessage(err)),
     });
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -257,13 +284,11 @@ function MenuItemForm({ onClose, onSuccess, initialData }: { onClose: () => void
                         <select 
                             value={form.categoryId}
                             onChange={e => setForm({ ...form, categoryId: e.target.value })}
-                            className="input-field cursor-pointer"
+                            className="input-field cursor-pointer uppercase font-bold"
                         >
-                            <option value="GENERAL">General</option>
-                            <option value="STARTER">Starters</option>
-                            <option value="MAIN">Main Course</option>
-                            <option value="DESSERT">Dessert</option>
-                            <option value="DRINK">Drinks</option>
+                            {categories.map(cat => (
+                                <option key={cat} value={cat}>{cat.replace('_', ' ')}</option>
+                            ))}
                         </select>
                     </div>
                 </div>
@@ -303,6 +328,6 @@ function MenuItemForm({ onClose, onSuccess, initialData }: { onClose: () => void
     );
 }
 
-function cn(...inputs: any[]) {
+function cn(...inputs: LooseValue[]) {
     return inputs.filter(Boolean).join(' ');
 }

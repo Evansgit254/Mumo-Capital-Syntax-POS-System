@@ -45,7 +45,7 @@ export default function PermissionsPage() {
     });
 
     const createMutation = useMutation({
-        mutationFn: (data: any) => userService.create(data),
+        mutationFn: (data: LooseValue) => userService.create(data),
         onSuccess: () => {
             showToast('Staff invited successfully', 'success');
             setShowInviteModal(false);
@@ -59,7 +59,7 @@ export default function PermissionsPage() {
         onMutate: async ({ id, role }) => {
             await queryClient.cancelQueries({ queryKey: ['users'] });
             const previous = queryClient.getQueryData(['users']);
-            queryClient.setQueryData(['users'], (old: any[]) =>
+            queryClient.setQueryData(['users'], (old: LooseValue[]) =>
                 old?.map(u => (u.id === id ? { ...u, role } : u))
             );
             return { previous };
@@ -79,7 +79,7 @@ export default function PermissionsPage() {
         onMutate: async ({ id, status }) => {
             await queryClient.cancelQueries({ queryKey: ['users'] });
             const previous = queryClient.getQueryData(['users']);
-            queryClient.setQueryData(['users'], (old: any[]) =>
+            queryClient.setQueryData(['users'], (old: LooseValue[]) =>
                 old?.map(u => (u.id === id ? { ...u, status } : u))
             );
             return { previous };
@@ -100,7 +100,7 @@ export default function PermissionsPage() {
 
     const users = usersQuery.data || [];
     const filtered = users.filter(
-        (u: any) =>
+        (u: LooseValue) =>
             u.firstName?.toLowerCase().includes(search.toLowerCase()) ||
             u.lastName?.toLowerCase().includes(search.toLowerCase()) ||
             u.email?.toLowerCase().includes(search.toLowerCase())
@@ -161,7 +161,7 @@ export default function PermissionsPage() {
                 </div>
                 <div className="flex gap-3 overflow-x-auto pb-2 tablet:pb-0 w-full tablet:w-auto">
                     {ROLE_OPTIONS.map(r => {
-                        const count = users.filter((u: any) => u.role === r.value).length;
+                        const count = users.filter((u: LooseValue) => u.role === r.value).length;
                         return (
                             <div
                                 key={r.value}
@@ -210,7 +210,7 @@ export default function PermissionsPage() {
                 />
             ) : (
                 <div className="space-y-3">
-                    {filtered.map((user: any) => {
+                    {filtered.map((user: LooseValue) => {
                         const isSelf = user.id === session.userId;
                         const isInactive = user.status === 'INACTIVE';
                         const badge = getRoleBadge(user.role);

@@ -2,7 +2,7 @@
 import { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
-import axios from 'axios';
+import { authService, getErrorMessage } from '../api/service';
 import { LogIn, Loader2, AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
@@ -20,13 +20,7 @@ export default function LoginPage() {
         setIsSubmitting(true);
 
         try {
-            const res = await axios.post(
-                `${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/auth/login`,
-                { email, password },
-                { withCredentials: true } // FIX 11: Accept httpOnly cookie from server
-            );
-            
-            const { accessToken, user } = res.data;
+            const { accessToken, user } = await authService.login({ email, password });
             
             setSession({
                 token: accessToken,
@@ -39,9 +33,8 @@ export default function LoginPage() {
             });
 
             navigate('/dashboard', { replace: true });
-        } catch (err: any) {
-            const message = err.response?.data?.error || 'Authentication failed';
-            setError(message);
+        } catch (err) {
+            setError(getErrorMessage(err) || 'Authentication failed');
         } finally {
             setIsSubmitting(false);
         }

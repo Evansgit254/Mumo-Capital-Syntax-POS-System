@@ -45,6 +45,7 @@ import {
     DateRange 
 } from '../../lib/analytics';
 import { downloadCSV } from '../../lib/exportCsv';
+import toast from 'react-hot-toast';
 
 // UI
 import Skeleton from '../../components/ui/Skeleton';
@@ -58,7 +59,7 @@ interface PanelProps {
 // ─── ERROR BOUNDARY (Simplistic for Panel level) ──────────────────────────────
 
 class PanelErrorBoundary extends React.Component<{ children: React.ReactNode, title: string, onRetry: () => void }, { hasError: boolean }> {
-    constructor(props: any) {
+    constructor(props: LooseValue) {
         super(props);
         this.state = { hasError: false };
     }
@@ -391,7 +392,7 @@ export default function ExecutiveAnalyticsPage() {
             
             {/* Footer Insight */}
             <div className="flex justify-center pt-8">
-                <button className="text-on-surface-variant label-sm font-bold flex items-center gap-2 hover:text-secondary transition-all group">
+                <button onClick={() => toast('Granular audit dashboard coming soon', { icon: '📊' })} className="text-on-surface-variant label-sm font-bold flex items-center gap-2 hover:text-secondary transition-all group">
                     ACCESS GRANULAR TRANSACTION AUDIT
                     <ArrowRight size={16} className="group-hover:translate-x-2 transition-transform" />
                 </button>

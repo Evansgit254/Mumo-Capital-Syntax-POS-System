@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { orderService } from '../api/service';
+import { orderService, getErrorMessage } from '../api/service';
+import toast from 'react-hot-toast';
 import { useStore } from '../store/useStore';
 import { OrderStatus, Role } from '@mumo/types';
 import { 
@@ -9,7 +10,10 @@ import {
     Bell, 
     MoreVertical,
     LayoutGrid,
-    AlertCircle
+    AlertCircle,
+    Trash2,
+    Info,
+    XCircle
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import EmptyState from '../components/ui/EmptyState';
@@ -21,6 +25,7 @@ export default function KDSPage() {
     const { session } = useStore();
     const queryClient = useQueryClient();
     const [now, setNow] = useState(new Date());
+    const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
     // Role Guard
     if (session.role === Role.STAFF) {
@@ -52,6 +57,7 @@ export default function KDSPage() {
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['orders-live'] });
         },
+        onError: (err) => toast.error(getErrorMessage(err)),
     });
 
     if (session.role === Role.STAFF && !session.email?.includes('waiter')) {
@@ -60,7 +66,7 @@ export default function KDSPage() {
     }
 
     return (
-        <div className="p-6 tablet:p-10 space-y-8 bg-surface min-h-full">
+        <div className="p-6 tablet:p-10 space-y-8 bg-surface min-h-full" onClick={() => setOpenMenuId(null)}>
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div>
@@ -94,6 +100,8 @@ export default function KDSPage() {
                             order={order} 
                             now={now} 
                             onUpdateStatus={(status) => updateStatusMutation.mutate({ id: order.id, status })}
+                            openMenuId={openMenuId}
+                            setOpenMenuId={setOpenMenuId}
                         />
                     ))
                 )}
@@ -102,7 +110,19 @@ export default function KDSPage() {
     );
 }
 
-function OrderCard({ order, now, onUpdateStatus }: { order: any, now: Date, onUpdateStatus: (s: OrderStatus) => void }) {
+function OrderCard({ 
+    order, 
+    now, 
+    onUpdateStatus,
+    openMenuId,
+    setOpenMenuId
+}: { 
+    order: LooseValue, 
+    now: Date, 
+    onUpdateStatus: (s: OrderStatus) => void,
+    openMenuId: string | null,
+    setOpenMenuId: (id: string | null) => void 
+}) {
     const createdAt = new Date(order.createdAt);
     const elapsedMinutes = Math.floor((now.getTime() - createdAt.getTime()) / 60000);
 
@@ -134,24 +154,60 @@ function OrderCard({ order, now, onUpdateStatus }: { order: any, now: Date, onUp
                         <span className="text-[11px] font-bold tracking-tighter uppercase">{elapsedMinutes}m elapsed</span>
                     </div>
                 </div>
-                <div className="bg-surface-container-high p-2 rounded-lg text-on-surface-variant">
-                    <MoreVertical size={16} />
+                <div className="relative">
+                    <button 
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenMenuId(openMenuId === order.id ? null : order.id);
+                        }}
+                        className={cn(
+                            "p-2 rounded-lg transition-all",
+                            openMenuId === order.id ? "bg-primary text-on-primary" : "bg-surface-container-high text-on-surface-variant hover:bg-surface-container-highest"
+                        )}
+                    >
+                        <MoreVertical size={16} />
+                    </button>
+
+                    {openMenuId === order.id && (
+                        <div className="absolute right-0 mt-2 w-48 bg-surface-container-high border border-outline-variant rounded-xl shadow-2xl z-[50] py-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                             <button 
+                                onClick={() => toast('Full order data view coming soon')}
+                                className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-white/5 transition-colors text-sm font-medium"
+                            >
+                                <Info size={16} className="text-secondary" />
+                                Order Details
+                            </button>
+                            <div className="my-1 border-t border-outline-variant" />
+                            <button 
+                                onClick={() => {
+                                    if (confirm('Cancel this entire order?')) {
+                                        onUpdateStatus(OrderStatus.CANCELLED);
+                                    }
+                                }}
+                                className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-error/10 text-error transition-colors text-sm font-medium"
+                            >
+                                <XCircle size={16} />
+                                Cancel Order
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
 
             {/* Items */}
             <div className="flex-1 space-y-3">
-                {order.items?.map((item: any) => (
+                {order.items?.map((item: LooseValue) => (
                     <div key={item.id} className="flex gap-3">
                         <div className="h-8 w-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-xs font-black text-secondary shrink-0">
                             {item.quantity}x
                         </div>
                         <div className="flex-1 min-w-0">
                             <p className="body-md font-bold text-on-surface truncate leading-tight">{item.menuItem?.name}</p>
-                            {/* Dummy modifiers/notes for visual completeness as per designs */}
-                            <p className="text-[11px] text-on-surface-variant/70 italic truncate">
-                                {item.notes || "+ No Salt, Extra Crispy"}
-                            </p>
+                            {item.notes && (
+                                <p className="text-[11px] text-on-surface-variant/70 italic truncate">
+                                    {item.notes}
+                                </p>
+                            )}
                         </div>
                     </div>
                 ))}

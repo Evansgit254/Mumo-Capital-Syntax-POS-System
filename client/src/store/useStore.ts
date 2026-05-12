@@ -102,7 +102,7 @@ export const useStore = create<StoreState>()(
                 addItem: (newItem) =>
                     set((state) => {
                         const existing = state.cart.items.find(
-                            (i) => i.menuItemId === newItem.menuItemId
+                            (i) => i.menuItemId === newItem.menuItemId && i.name === newItem.name
                         );
                         if (existing) {
                             return {
@@ -166,7 +166,7 @@ export const useStore = create<StoreState>()(
                     set((state) => ({
                         ui: { ...state.ui, sidebarOpen },
                     })),
-                primaryColor: '#008B8B',
+                primaryColor: 'var(--color-secondary)',
                 setPrimaryColor: (primaryColor) =>
                     set((state) => ({
                         ui: { ...state.ui, primaryColor },

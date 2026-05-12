@@ -59,7 +59,7 @@ router.post(
     async (req: Request, res: Response, next: NextFunction) => {
         try {
             const { tenantId } = req.user!;
-            const { email, firstName, lastName, role, password, hourlyRate } = req.body;
+            const { email, firstName, lastName, password, hourlyRate } = req.body;
 
             // Check if user already exists
             const existing = await prisma.user.findUnique({ where: { email } });
@@ -74,7 +74,7 @@ router.post(
                     email,
                     firstName,
                     lastName,
-                    role,
+                    role: Role.STAFF,
                     tenantId,
                     password: hashedPassword,
                     hourlyRate: new Prisma.Decimal(hourlyRate || 0),

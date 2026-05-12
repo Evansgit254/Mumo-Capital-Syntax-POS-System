@@ -4,7 +4,7 @@ export interface ResolvedTenant {
     tenantId: string;
     tenantName: string;
     displayName?: string;
-    settings?: any;
+    settings?: LooseValue;
 }
 
 export class TenantResolutionError extends Error {
@@ -18,7 +18,10 @@ export class TenantResolutionError extends Error {
 let cachedTenant: ResolvedTenant | null = null;
 let resolvePromise: Promise<ResolvedTenant> | null = null;
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+const API_URL = import.meta.env.VITE_API_URL;
+if (!API_URL) throw new Error(
+  'FATAL: VITE_API_URL is not set. Check your .env file.'
+);
 
 export async function resolveTenant(): Promise<ResolvedTenant> {
     if (cachedTenant) {
@@ -42,7 +45,7 @@ export async function resolveTenant(): Promise<ResolvedTenant> {
         }
     }
 
-    resolvePromise = axios.get<{tenantId: string; tenantName: string; displayName?: string; settings?: any}>(
+    resolvePromise = axios.get<{tenantId: string; tenantName: string; displayName?: string; settings?: LooseValue}>(
         `${API_URL}/api/public/tenants/resolve`,
         { params: { subdomain } }
     ).then(response => {

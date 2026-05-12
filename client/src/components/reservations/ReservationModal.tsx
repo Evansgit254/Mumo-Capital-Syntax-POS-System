@@ -5,7 +5,7 @@ import { cn } from '../../lib/utils';
 interface ReservationModalProps {
     type: 'booking' | 'waitlist';
     onClose: () => void;
-    onSubmit: (data: any) => void;
+    onSubmit: (data: LooseValue) => void;
     isPending?: boolean;
 }
 

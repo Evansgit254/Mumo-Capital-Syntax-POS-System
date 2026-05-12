@@ -7,19 +7,65 @@ import {
     Table, 
     Payment, 
     OrderStatus, 
-    PaymentStatus 
+    PaymentStatus,
+    Reservation,
+    InventoryItem,
+    Vendor,
+    PurchaseOrder,
+    Customer,
+    TenantSettings,
+    User,
+    Shift,
+    ClockEvent,
+    InventoryAuditLog
 } from '@mumo/types';
 
+type QueueItem = {
+    resolve: (token: string | null) => void;
+    reject: (error: unknown) => void;
+};
+
+type RefreshResponse = { 
+    accessToken: string;
+    user: User & { tenantName: string };
+};
+type LoginResponse = {
+    accessToken: string;
+    user: User & { tenantName: string };
+};
+type TableLayoutUpdate = Partial<Table> & { id: string; x?: number; y?: number };
+type ReservationInput = Omit<Partial<Reservation>, 'id' | 'tenantId' | 'createdAt' | 'updatedAt'>;
+type InventoryInput = Omit<Partial<InventoryItem>, 'id' | 'tenantId' | 'createdAt' | 'updatedAt'>;
+type InventoryAdjustmentInput = { quantity: number; type: string; reason?: string };
+type VendorInput = Omit<Partial<Vendor>, 'id' | 'tenantId' | 'createdAt' | 'updatedAt'>;
+type PurchaseOrderInput = { vendorId: string; items: { inventoryItemId: string; orderedQty: number; unitCost: number }[] };
+type ReceivedPurchaseOrderItem = { inventoryItemId: string; receivedQty: number; reason?: string };
+type CustomerInput = Omit<Partial<Customer>, 'id' | 'tenantId' | 'createdAt' | 'updatedAt'>;
+type TenantSettingsInput = Record<string, unknown>;
+type CreateUserInput = { email: string; firstName: string; lastName: string; password: string; hourlyRate?: number };
+type UserWithOptionalStatus = User & { status?: string };
+type RolePermissions = { role: string; permissions: string[] };
+type ReservationFilters = { date?: string; status?: string; start?: string; end?: string };
+type FolioCheckoutPayload = { charges: { orderId: string; amount: number; method: 'CASH' | 'CARD' }[] };
+type FolioCheckoutResponse = { folioId: string; totalSettled: number; payments: Payment[] };
+type ShiftInput = { userId?: string; date?: string; startTime?: string; endTime?: string; station?: string };
+type AuditLogResponse = { logs: InventoryAuditLog[]; total: number; page: number; limit: number };
+
 // ── Axios Instance ───────────────────────────────────────────────────────────
+const API_URL = import.meta.env.VITE_API_URL;
+if (!API_URL) throw new Error(
+  'FATAL: VITE_API_URL is not set. Check your .env file.'
+);
+
 const api = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000',
+    baseURL: API_URL,
     headers: { 'Content-Type': 'application/json' },
     withCredentials: true, // FIX 11: Send httpOnly cookies with every request
 });
 
 export const getPublicClient = (tenantId: string) => {
     return axios.create({
-        baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000',
+        baseURL: API_URL,
         headers: {
             'Content-Type': 'application/json',
             'x-tenant-id': tenantId
@@ -47,9 +93,9 @@ api.interceptors.request.use((config) => {
 
 // Mutex-style refresh logic
 let isRefreshing = false;
-let failedQueue: any[] = [];
+let failedQueue: QueueItem[] = [];
 
-const processQueue = (error: any, token: string | null = null) => {
+const processQueue = (error: unknown, token: string | null = null): void => {
     failedQueue.forEach(prom => {
         if (error) prom.reject(error);
         else prom.resolve(token);
@@ -63,67 +109,73 @@ api.interceptors.response.use(
         const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
         
         if (error.response?.status === 401 && !originalRequest._retry) {
-            if (isRefreshing) {
-                return new Promise((resolve, reject) => {
-                    failedQueue.push({ resolve, reject });
-                }).then(token => {
-                    originalRequest.headers.Authorization = `Bearer ${token}`;
-                    return api(originalRequest);
-                }).catch(err => Promise.reject(err));
-            }
-
             originalRequest._retry = true;
-            isRefreshing = true;
-
-            const { setSession, clearSession } = useStore.getState();
 
             try {
-                // FIX 11: Refresh token is sent automatically via httpOnly cookie.
-                // No need to read it from state or send it in the body.
-                const res = await axios.post(
-                    `${api.defaults.baseURL}/auth/refresh`,
-                    {},
-                    { withCredentials: true }
-                );
-                const { accessToken: newToken } = res.data;
-                
-                setSession({ token: newToken });
-                processQueue(null, newToken);
+                const newToken = await performRefresh();
+                if (!newToken) throw error;
                 
                 originalRequest.headers.Authorization = `Bearer ${newToken}`;
                 return api(originalRequest);
             } catch (err) {
-                processQueue(err, null);
-                clearSession();
                 return Promise.reject(err);
-            } finally {
-                isRefreshing = false;
             }
         }
         return Promise.reject(error);
     }
 );
 
+let refreshPromise: Promise<string | null> | null = null;
+
+async function performRefresh(): Promise<string | null> {
+    if (refreshPromise) return refreshPromise;
+
+    refreshPromise = (async () => {
+        try {
+            const res = await axios.post<RefreshResponse>(
+                `${api.defaults.baseURL}/auth/refresh`,
+                {},
+                { withCredentials: true }
+            );
+            const { accessToken, user } = res.data;
+            if (accessToken) {
+                useStore.getState().setSession({ 
+                    token: accessToken,
+                    tenantId: user.tenantId,
+                    tenantName: user.tenantName,
+                    role: user.role,
+                    userId: user.id,
+                    email: user.email,
+                    firstName: user.firstName,
+                });
+                return accessToken;
+            }
+            return null;
+        } catch (err) {
+            useStore.getState().setSession({
+                token: null,
+                tenantId: null,
+                tenantName: null,
+                role: null,
+                userId: null,
+                email: null,
+                firstName: null,
+            });
+            return null;
+        } finally {
+            refreshPromise = null;
+        }
+    })();
+
+    return refreshPromise;
+}
+
 // ── Session Restoration ──────────────────────────────────────────────────────
 // FIX 11: On page reload, attempt to restore access token from httpOnly cookie
 // via a silent refresh call. Call this once on app initialization.
 export async function restoreSession(): Promise<boolean> {
-    try {
-        const res = await axios.post(
-            `${api.defaults.baseURL}/auth/refresh`,
-            {},
-            { withCredentials: true }
-        );
-        const { accessToken } = res.data;
-        if (accessToken) {
-            useStore.getState().setSession({ token: accessToken });
-            return true;
-        }
-        return false;
-    } catch {
-        // No valid refresh cookie — user must log in
-        return false;
-    }
+    const token = await performRefresh();
+    return !!token;
 }
 
 // ── Error Helper ─────────────────────────────────────────────────────────────
@@ -136,9 +188,15 @@ export const getErrorMessage = (error: unknown): string => {
 
 // ── Service Layer ────────────────────────────────────────────────────────────
 
+export const authService = {
+    login: (data: { email: string; password: string }) =>
+        api.post<LoginResponse>('/auth/login', data).then(r => r.data),
+};
+
 export const menuService = {
     getAll: () => api.get<MenuItem[]>('/api/menus').then(r => r.data),
     getOne: (id: string) => api.get<MenuItem>(`/api/menus/${id}`).then(r => r.data),
+    getModifiers: (id: string) => api.get<{ id: string; name: string; price: number }[]>(`/api/menus/${id}/modifiers`).then(r => r.data),
     create: (data: Partial<MenuItem>) => api.post<MenuItem>('/api/menus', data).then(r => r.data),
     update: (id: string, data: Partial<MenuItem>) => api.put<MenuItem>(`/api/menus/${id}`, data).then(r => r.data),
     delete: (id: string) => api.delete(`/api/menus/${id}`).then(r => r.data),
@@ -146,7 +204,7 @@ export const menuService = {
 
 export const orderService = {
     getAll: () => api.get<Order[]>('/api/orders').then(r => r.data),
-    getLive: () => api.get<any[]>('/api/orders/live').then(r => r.data),
+    getLive: () => api.get<Order[]>('/api/orders/live').then(r => r.data),
     getOne: (id: string) => api.get<Order>(`/api/orders/${id}`).then(r => r.data),
     create: (data: { tableId?: string; items: { menuItemId: string; quantity: number }[] }) => 
         api.post<Order>('/api/orders', data).then(r => r.data),
@@ -160,7 +218,7 @@ export const tableService = {
     getOrders: (id: string) => api.get<Order[]>(`/api/tables/${id}/orders`).then(r => r.data),
     create: (data: Partial<Table>) => api.post<Table>('/api/tables', data).then(r => r.data),
     update: (id: string, data: Partial<Table>) => api.put<Table>(`/api/tables/${id}`, data).then(r => r.data),
-    batchUpdate: (tables: any[]) => api.put<{ updated: number; tables: Table[] }>('/api/tables/batch', { tables }).then(r => r.data),
+    batchUpdate: (tables: TableLayoutUpdate[]) => api.put<{ updated: number; tables: Table[] }>('/api/tables/batch', { tables }).then(r => r.data),
     delete: (id: string) => api.delete(`/api/tables/${id}`).then(r => r.data),
     settle: (id: string) => api.post<Table>(`/api/tables/${id}/settle`).then(r => r.data),
     transfer: (id: string, targetTableId: string) => api.post<Table>(`/api/tables/${id}/transfer`, { targetTableId }).then(r => r.data),
@@ -169,69 +227,70 @@ export const tableService = {
 
 export const reservationService = {
     getAll: (params?: { date?: string; status?: string }) => 
-        api.get<any[]>('/api/reservations', { params }).then(r => r.data),
-    getWaitlist: () => api.get<any[]>('/api/reservations/waitlist').then(r => r.data),
-    getOne: (id: string) => api.get<any>(`/api/reservations/${id}`).then(r => r.data),
-    create: (data: any) => api.post<any>('/api/reservations', data).then(r => r.data),
-    update: (id: string, data: any) => api.put<any>(`/api/reservations/${id}`, data).then(r => r.data),
-    checkIn: (id: string) => api.post<any>(`/api/reservations/${id}/checkin`).then(r => r.data),
+        api.get<Reservation[]>('/api/reservations', { params }).then(r => r.data),
+    getWaitlist: () => api.get<Reservation[]>('/api/reservations/waitlist').then(r => r.data),
+    getOne: (id: string) => api.get<Reservation>(`/api/reservations/${id}`).then(r => r.data),
+    create: (data: ReservationInput) => api.post<Reservation>('/api/reservations', data).then(r => r.data),
+    update: (id: string, data: ReservationInput) => api.put<Reservation>(`/api/reservations/${id}`, data).then(r => r.data),
+    checkIn: (id: string) => api.post<Reservation>(`/api/reservations/${id}/checkin`).then(r => r.data),
     cancel: (id: string) => api.delete(`/api/reservations/${id}`).then(r => r.data),
 };
 
 export const inventoryService = {
-    getAll: () => api.get<any[]>('/api/inventory').then(r => r.data),
-    getAlerts: () => api.get<any[]>('/api/inventory', { params: { alert: true } }).then(r => r.data),
-    getOne: (id: string) => api.get<any>(`/api/inventory/${id}`).then(r => r.data),
-    create: (data: any) => api.post<any>('/api/inventory', data).then(r => r.data),
-    update: (id: string, data: any) => api.put<any>(`/api/inventory/${id}`, data).then(r => r.data),
-    adjust: (id: string, data: any) => api.post<any>(`/api/inventory/${id}/adjust`, data).then(r => r.data),
+    getAll: () => api.get<InventoryItem[]>('/api/inventory').then(r => r.data),
+    getAlerts: () => api.get<InventoryItem[]>('/api/inventory', { params: { alert: true } }).then(r => r.data),
+    getOne: (id: string) => api.get<InventoryItem>(`/api/inventory/${id}`).then(r => r.data),
+    create: (data: InventoryInput) => api.post<InventoryItem>('/api/inventory', data).then(r => r.data),
+    update: (id: string, data: InventoryInput) => api.put<InventoryItem>(`/api/inventory/${id}`, data).then(r => r.data),
+    adjust: (id: string, data: InventoryAdjustmentInput) => api.post<InventoryItem>(`/api/inventory/${id}/adjust`, data).then(r => r.data),
     getAuditLog: (params?: { page?: number; limit?: number }) => 
-        api.get<any>('/api/inventory/audit-log', { params }).then(r => r.data),
+        api.get<AuditLogResponse>('/api/inventory/audit-log', { params }).then(r => r.data),
+    delete: (id: string) => api.delete(`/api/inventory/${id}`).then(r => r.data),
 };
 
 export const vendorService = {
-    getAll: () => api.get<any[]>('/api/vendors').then(r => r.data),
-    getOne: (id: string) => api.get<any>(`/api/vendors/${id}`).then(r => r.data),
-    create: (data: any) => api.post<any>('/api/vendors', data).then(r => r.data),
-    update: (id: string, data: any) => api.put<any>(`/api/vendors/${id}`, data).then(r => r.data),
+    getAll: () => api.get<Vendor[]>('/api/vendors').then(r => r.data),
+    getOne: (id: string) => api.get<Vendor>(`/api/vendors/${id}`).then(r => r.data),
+    create: (data: VendorInput) => api.post<Vendor>('/api/vendors', data).then(r => r.data),
+    update: (id: string, data: VendorInput) => api.put<Vendor>(`/api/vendors/${id}`, data).then(r => r.data),
     delete: (id: string) => api.delete(`/api/vendors/${id}`).then(r => r.data),
 };
 
 export const purchaseOrderService = {
-    getAll: () => api.get<any[]>('/api/vendors/orders').then(r => r.data),
-    create: (data: any) => api.post<any>('/api/vendors/orders', data).then(r => r.data),
-    updateStatus: (id: string, status: string, receivedItems?: any[]) => 
-        api.patch<any>(`/api/vendors/orders/${id}/status`, { status, receivedItems }).then(r => r.data),
+    getAll: () => api.get<PurchaseOrder[]>('/api/vendors/orders').then(r => r.data),
+    create: (data: PurchaseOrderInput) => api.post<PurchaseOrder>('/api/vendors/orders', data).then(r => r.data),
+    updateStatus: (id: string, status: PurchaseOrder['status'], receivedItems?: ReceivedPurchaseOrderItem[]) => 
+        api.patch<PurchaseOrder | { message: string }>(`/api/vendors/orders/${id}/status`, { status, receivedItems }).then(r => r.data),
 };
 
 export const customerService = {
     getAll: (search?: string) => 
-        api.get<any[]>('/api/customers', { params: { search } }).then(r => r.data),
-    create: (data: any) => api.post<any>('/api/customers', data).then(r => r.data),
-    update: (id: string, data: any) => api.put<any>(`/api/customers/${id}`, data).then(r => r.data),
+        api.get<Customer[]>('/api/customers', { params: { search } }).then(r => r.data),
+    create: (data: CustomerInput) => api.post<Customer>('/api/customers', data).then(r => r.data),
+    update: (id: string, data: CustomerInput) => api.put<Customer>(`/api/customers/${id}`, data).then(r => r.data),
 };
 
 export const tenantService = {
-    getSettings: () => api.get<any>('/api/tenants/settings').then(r => r.data),
-    updateSettings: (data: any) => api.put<any>('/api/tenants/settings', data).then(r => r.data),
+    getSettings: () => api.get<TenantSettings>('/api/tenants/settings').then(r => r.data),
+    updateSettings: (data: TenantSettingsInput) => api.put<TenantSettings>('/api/tenants/settings', data).then(r => r.data),
 };
 
 export const userService = {
-    getAll: () => api.get<any[]>('/api/users').then(r => r.data),
-    create: (data: any) => api.post<any>('/api/users', data).then(r => r.data),
+    getAll: () => api.get<UserWithOptionalStatus[]>('/api/users').then(r => r.data),
+    create: (data: CreateUserInput) => api.post<User>('/api/users', data).then(r => r.data),
     updateRole: (id: string, role: string) => 
-        api.put<any>(`/api/users/${id}/role`, { role }).then(r => r.data),
+        api.put<User>(`/api/users/${id}/role`, { role }).then(r => r.data),
     updateStatus: (id: string, status: string) => 
-        api.put<any>(`/api/users/${id}/status`, { status }).then(r => r.data),
+        api.put<User>(`/api/users/${id}/status`, { status }).then(r => r.data),
     updateRate: (id: string, hourlyRate: number) =>
-        api.put<any>(`/api/users/${id}/rate`, { hourlyRate }).then(r => r.data),
+        api.put<User>(`/api/users/${id}/rate`, { hourlyRate }).then(r => r.data),
 };
 
 export const permissionService = {
     getRolePermissions: (role: string) => 
-        api.get<any>(`/api/roles/${role}/permissions`).then(r => r.data),
+        api.get<RolePermissions>(`/api/roles/${role}/permissions`).then(r => r.data),
     updateRolePermissions: (role: string, permissions: string[]) => 
-        api.put<any>(`/api/roles/${role}/permissions`, { permissions }).then(r => r.data),
+        api.put<RolePermissions>(`/api/roles/${role}/permissions`, { permissions }).then(r => r.data),
 };
 
 export const paymentService = {
@@ -241,17 +300,19 @@ export const paymentService = {
         api.post<Payment>('/api/payments', data).then(r => r.data),
     updateStatus: (id: string, status: PaymentStatus) => 
         api.put<Payment>(`/api/payments/${id}/status`, { status }).then(r => r.data),
+    checkoutFolio: (roomId: string, payload: FolioCheckoutPayload) =>
+        api.post<FolioCheckoutResponse>('/api/payments/folio', { roomId, ...payload }).then(r => r.data),
 };
 
 export const guestService = {
     lookupReservation: (data: { id?: string; guestName?: string }) => 
-        api.post<any>('/api/public/reservations/lookup', data).then(r => r.data),
+        api.post<Reservation>('/api/public/reservations/lookup', data).then(r => r.data),
     checkIn: (id: string) => 
-        api.post<any>(`/api/public/reservations/${id}/checkin`).then(r => r.data),
+        api.post<Reservation>(`/api/public/reservations/${id}/checkin`).then(r => r.data),
     getMenu: () => 
         api.get<MenuItem[]>('/api/public/menus').then(r => r.data),
     placeOrder: (data: { tableId: string; items: { menuItemId: string; quantity: number }[] }) => 
-        api.post<Order>('/api/public/orders', data).then(r => r.data),
+        api.post<Order>('/api/public/orders/external', data).then(r => r.data),
     getRooms: () => 
         api.get<Table[]>('/api/public/tables').then(r => r.data),
 };
@@ -269,30 +330,30 @@ export const guestFolioService = {
         ]);
         return { orders: ordersRes.data, payments: paymentsRes.data };
     },
-    getCheckedInGuests: (filters?: any) => 
-        api.get<any[]>('/api/reservations', { params: { status: 'checked-in', ...filters } }).then(r => r.data),
+    getCheckedInGuests: (filters?: ReservationFilters) => 
+        api.get<Reservation[]>('/api/reservations', { params: { status: 'checked-in', ...filters } }).then(r => r.data),
     getGuestById: (reservationId: string) => 
-        api.get<any>(`/api/reservations/${reservationId}`).then(r => r.data),
-    checkoutFolio: (roomId: string, payload: any) => 
-        api.post<any>('/api/payments/folio', { roomId, ...payload }).then(r => r.data),
+        api.get<Reservation>(`/api/reservations/${reservationId}`).then(r => r.data),
+    checkoutFolio: (roomId: string, payload: FolioCheckoutPayload) => 
+        api.post<FolioCheckoutResponse>('/api/payments/folio', { roomId, ...payload }).then(r => r.data),
 };
 
 export const shiftService = {
     getAll: (params?: { start?: string; end?: string }) => 
-        api.get<any[]>('/api/shifts', { params }).then(r => r.data),
-    create: (data: any) => 
-        api.post<any>('/api/shifts', data).then(r => r.data),
-    update: (id: string, data: any) => 
-        api.put<any>(`/api/shifts/${id}`, data).then(r => r.data),
+        api.get<Shift[]>('/api/shifts', { params }).then(r => r.data),
+    create: (data: ShiftInput) => 
+        api.post<Shift>('/api/shifts', data).then(r => r.data),
+    update: (id: string, data: ShiftInput) => 
+        api.put<Shift>(`/api/shifts/${id}`, data).then(r => r.data),
     delete: (id: string) => 
         api.delete(`/api/shifts/${id}`).then(r => r.data),
 };
 
 export const clockEventService = {
     getAll: () => 
-        api.get<any[]>('/api/clock-events').then(r => r.data),
+        api.get<ClockEvent[]>('/api/clock-events').then(r => r.data),
     create: (data: { userId?: string; type: 'IN' | 'OUT' }) => 
-        api.post<any>('/api/clock-events', data).then(r => r.data),
+        api.post<ClockEvent>('/api/clock-events', data).then(r => r.data),
 };
 
 export default api;

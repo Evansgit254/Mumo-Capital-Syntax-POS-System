@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { 
     Search, 
     Plus, 
@@ -15,7 +15,9 @@ import {
     Gift,
     Calendar,
     Phone,
-    Mail
+    Mail,
+    X,
+    Loader2
 } from 'lucide-react';
 import { customerService, getErrorMessage } from '../api/service';
 import { useStore } from '../store/useStore';
@@ -24,7 +26,9 @@ import { toast } from 'react-hot-toast';
 
 const LoyaltyPage: React.FC = () => {
     const { session } = useStore();
+    const queryClient = useQueryClient();
     const [searchQuery, setSearchQuery] = useState('');
+    const [showNewGuestModal, setShowNewGuestModal] = useState(false);
 
     const { data: customers, isLoading } = useQuery({
         queryKey: ['customers', searchQuery],
@@ -35,8 +39,8 @@ const LoyaltyPage: React.FC = () => {
         if (!customers) return { total: 0, premium: 0, points: 0 };
         return {
             total: customers.length,
-            premium: customers.filter((c: any) => c.loyaltyPoints > 500).length,
-            points: customers.reduce((sum: number, c: any) => sum + c.loyaltyPoints, 0),
+            premium: customers.filter((c: LooseValue) => c.loyaltyPoints > 500).length,
+            points: customers.reduce((sum: number, c: LooseValue) => sum + c.loyaltyPoints, 0),
         };
     }, [customers]);
 
@@ -66,11 +70,11 @@ const LoyaltyPage: React.FC = () => {
                     <p className="body-lg text-on-surface-variant">Manage customer relationships and reward programs for {session.tenantName}.</p>
                 </div>
                 <div className="flex gap-3">
-                     <button className="btn-secondary flex items-center gap-2 group self-start md:self-center">
+                     <button onClick={() => toast('Discount management coming soon!', { icon: '🏷️' })} className="btn-secondary flex items-center gap-2 group self-start md:self-center">
                         <Tag size={20} />
                         Discounts
                     </button>
-                    <button className="btn-primary flex items-center gap-2 group self-start md:self-center">
+                    <button onClick={() => setShowNewGuestModal(true)} className="btn-primary flex items-center gap-2 group self-start md:self-center">
                         <UserPlus size={20} />
                         New Guest
                     </button>
@@ -139,7 +143,7 @@ const LoyaltyPage: React.FC = () => {
 
                     <div className="card-default overflow-hidden">
                         <div className="divide-y divide-outline-variant bg-surface-container-lowest">
-                            {customers?.map((customer: any) => (
+                            {customers?.map((customer: LooseValue) => (
                                 <div key={customer.id} className="p-6 hover:bg-surface-container-low/50 transition-all group flex flex-col md:flex-row md:items-center justify-between gap-6 cursor-pointer">
                                     <div className="flex items-center gap-5">
                                         <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary/10 to-secondary/10 flex items-center justify-center text-xl font-bold text-on-surface border border-outline-variant">
@@ -239,15 +243,92 @@ const LoyaltyPage: React.FC = () => {
                             <h3 className="body-lg font-bold">Promotions</h3>
                         </div>
                         <p className="body-md text-on-surface-variant">Run seasonal campaigns and send personalized offers to your loyal guests.</p>
-                        <button className="btn-secondary w-full flex items-center justify-center gap-2 group">
+                        <button onClick={() => toast('Campaign builder coming soon!', { icon: '🎁' })} className="btn-secondary w-full flex items-center justify-center gap-2 group">
                             Create Campaign
                             <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
                         </button>
                     </section>
                 </div>
             </div>
+
+            {/* New Guest Modal */}
+            {showNewGuestModal && (
+                <div className="fixed inset-0 bg-surface/90 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <NewGuestForm
+                        onClose={() => setShowNewGuestModal(false)}
+                        onSuccess={() => {
+                            setShowNewGuestModal(false);
+                            queryClient.invalidateQueries({ queryKey: ['customers'] });
+                        }}
+                    />
+                </div>
+            )}
         </div>
     );
 };
+
+// ── New Guest Form ──────────────────────────────────────────────────────────
+function NewGuestForm({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+    const [form, setForm] = useState({ name: '', email: '', phone: '' });
+    const [errors, setErrors] = useState<Record<string, string>>({});
+
+    const mutation = useMutation({
+        mutationFn: customerService.create,
+        onSuccess: () => {
+            toast.success('Guest added successfully');
+            onSuccess();
+        },
+        onError: (err) => toast.error(getErrorMessage(err)),
+    });
+
+    const handleSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        const errs: Record<string, string> = {};
+        if (!form.name.trim()) errs.name = 'Guest name is required';
+        if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) errs.email = 'Invalid email format';
+        if (Object.keys(errs).length > 0) { setErrors(errs); return; }
+        mutation.mutate(form);
+    };
+
+    const cn = (...inputs: LooseValue[]) => inputs.filter(Boolean).join(' ');
+
+    return (
+        <div className="w-full max-w-lg card-default shadow-2xl animate-in zoom-in-95 duration-300">
+            <div className="flex items-center justify-between mb-8">
+                <h2 className="headline-md">Add Guest</h2>
+                <button onClick={onClose} className="h-10 w-10 rounded-xl hover:bg-white/5 flex items-center justify-center">
+                    <X size={24} />
+                </button>
+            </div>
+            <form onSubmit={handleSubmit} className="space-y-6">
+                <div className="space-y-2">
+                    <label className="label-sm text-on-surface-variant">Guest Name</label>
+                    <input type="text" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+                        className={cn('input-field', errors.name && 'border-error focus:ring-error/20')} placeholder="e.g. Jane Doe" />
+                    {errors.name && <p className="text-xs text-error">{errors.name}</p>}
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <label className="label-sm text-on-surface-variant">Email</label>
+                        <input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })}
+                            className={cn('input-field', errors.email && 'border-error focus:ring-error/20')} placeholder="guest@email.com" />
+                        {errors.email && <p className="text-xs text-error">{errors.email}</p>}
+                    </div>
+                    <div className="space-y-2">
+                        <label className="label-sm text-on-surface-variant">Phone</label>
+                        <input type="tel" value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })}
+                            className="input-field" placeholder="+254 700 000 000" />
+                    </div>
+                </div>
+                <div className="flex gap-3 justify-end pt-4">
+                    <button type="button" onClick={onClose} className="btn-secondary !h-12">Cancel</button>
+                    <button type="submit" disabled={mutation.isPending} className="btn-primary !h-12 !px-10">
+                        {mutation.isPending ? <Loader2 className="animate-spin" size={20} /> : 'Add Guest'}
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
+}
 
 export default LoyaltyPage;

@@ -127,6 +127,7 @@ export interface Reservation {
     notes?: string;
     createdAt: string | Date;
     updatedAt: string | Date;
+    table?: Table;
 }
 
 // ── Customers / Loyalty ──────────────────────────────────────────────────────
@@ -169,6 +170,28 @@ export interface InventoryItem {
     updatedAt: string | Date;
 }
 
+export enum OutletType {
+    RESTAURANT = 'RESTAURANT',
+    BAR = 'BAR',
+    CAFE = 'CAFE',
+    ROOM_SERVICE = 'ROOM_SERVICE',
+    POOL_BAR = 'POOL_BAR',
+}
+
+export interface OperatingHours {
+    [day: string]: { open: string; close: string };
+}
+
+export interface ReceiptConfig {
+    header?: string;
+    footer?: string;
+    showTax?: boolean;
+    headerText?: string;
+    footerText?: string;
+    showTaxBreakdown?: boolean;
+    showLogo: boolean;
+}
+
 // ── Tenant Settings ──────────────────────────────────────────────────────────
 
 export interface TenantSettings {
@@ -180,6 +203,9 @@ export interface TenantSettings {
     logoUrl?: string;
     primaryColor?: string;
     timezone: string;
+    outletType?: OutletType;
+    operatingHours?: OperatingHours;
+    receiptConfig?: ReceiptConfig;
     createdAt: string | Date;
     updatedAt: string | Date;
 }
@@ -252,6 +278,7 @@ export interface Vendor {
     contactName?: string;
     email?: string;
     phone?: string;
+    address?: string;
     categories: string[];
     createdAt: string | Date;
     updatedAt: string | Date;
@@ -262,7 +289,7 @@ export interface PurchaseOrderItem {
     purchaseOrderId: string;
     inventoryItemId: string;
     orderedQty: number;
-    receivedQty?: number;
+    receivedQty: number | null;
     unitCost: number;
     createdAt: string | Date;
     inventoryItem?: InventoryItem;
@@ -276,7 +303,7 @@ export interface PurchaseOrder {
     totalCost: number;
     createdAt: string | Date;
     updatedAt: string | Date;
-    items?: PurchaseOrderItem[];
+    items: PurchaseOrderItem[];
     vendor?: Vendor;
 }
 
@@ -286,8 +313,41 @@ export interface InventoryAuditLog {
     inventoryItemId: string;
     previousQty: number;
     newQty: number;
-    adjustmentType: AdjustmentType;
-    reason?: string;
-    userId?: string;
+    adjustmentType: 'AUDIT' | 'PURCHASE' | 'SALE' | 'WASTE';
+    reason: string;
+    userId: string;
     createdAt: string | Date;
+}
+
+export interface RevenueData {
+    date: string;
+    amount: number;
+    outletType: string;
+}
+
+export interface OccupancyData {
+    hour: number;
+    day: string;
+    rate: number;
+}
+
+export interface MenuPerformanceData {
+    itemId: string;
+    name: string;
+    revenue: number;
+    orderCount: number;
+}
+
+export interface LaborData {
+    userId: string;
+    name: string;
+    scheduledHours: number;
+    hourlyRate: number;
+    totalCost: number;
+}
+
+export interface InventorySnapshotData {
+    totalValue: number;
+    itemsBelowThreshold: number;
+    averageDaysRemaining: number;
 }

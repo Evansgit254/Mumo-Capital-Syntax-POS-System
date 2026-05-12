@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { orderService, paymentService, tableService } from '../api/service';
 import { useStore } from '../store/useStore';
@@ -11,18 +11,46 @@ import {
     ArrowRight,
     ShoppingBag
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { PaymentStatus } from '@mumo/types';
+import { useNavigate, useLocation } from 'react-router-dom';
+import toast from 'react-hot-toast';
 
 export default function CheckoutPage() {
     const navigate = useNavigate();
+    const location = useLocation();
     const queryClient = useQueryClient();
     const { cart } = useStore();
     const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD'>('CARD');
     const [isSuccess, setIsSuccess] = useState(false);
 
-    const totalAmount = cart.items.reduce((sum, item) => sum + item.subtotal, 0);
+    // Retrieve any order notes passed from POS page
+    const orderNote = (location.state as { orderNote?: string } | null)?.orderNote || '';
 
+    // Snapshot cart data on mount so clearCart() doesn't zero out display
+    const cartSnapshot = useMemo(() => ({
+        items: cart.items,
+        tableId: cart.tableId,
+        totalAmount: cart.items.reduce((sum, item) => sum + item.subtotal, 0),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }), []); // intentionally empty deps — snapshot on mount only
+
+    const totalAmount = cartSnapshot.totalAmount;
+
+    // Redirect to POS if there's nothing in the cart
+    if (cartSnapshot.items.length === 0 && !isSuccess) {
+        return (
+            <div className="h-full flex flex-col items-center justify-center p-6">
+                <ShoppingBag size={64} className="text-on-surface-variant/20 mb-4" />
+                <h2 className="headline-md mb-2">No items to settle</h2>
+                <p className="body-md text-on-surface-variant mb-8">Add items from the POS before proceeding to checkout.</p>
+                <button onClick={() => navigate('/pos')} className="btn-primary h-14 px-8">
+                    <ArrowRight size={20} />
+                    <span>Go to POS</span>
+                </button>
+            </div>
+        );
+    }
+
+    // Step 1: Create order on server, Step 2: Create payment
     const orderMutation = useMutation({
         mutationFn: orderService.create,
         onSuccess: (order) => {
@@ -31,31 +59,44 @@ export default function CheckoutPage() {
                 amount: totalAmount,
                 method: paymentMethod,
             });
+        },
+        onError: () => {
+            toast.error('Failed to create order. Please try again.');
         }
     });
 
     const paymentMutation = useMutation({
         mutationFn: paymentService.create,
         onSuccess: () => {
-            if (cart.tableId) {
-                tableService.settle(cart.tableId);
+            // Save tableId before clearing cart
+            const tableId = cartSnapshot.tableId;
+
+            // Settle the table if this was a table order
+            if (tableId) {
+                tableService.settle(tableId);
             }
+
             setIsSuccess(true);
             cart.clearCart();
+
+            // Invalidate relevant queries
             queryClient.invalidateQueries({ queryKey: ['orders'] });
             queryClient.invalidateQueries({ queryKey: ['tables'] });
-            if (cart.tableId) {
-                queryClient.invalidateQueries({ queryKey: ['table', cart.tableId] });
-                queryClient.invalidateQueries({ queryKey: ['table-orders', cart.tableId] });
+            if (tableId) {
+                queryClient.invalidateQueries({ queryKey: ['table', tableId] });
+                queryClient.invalidateQueries({ queryKey: ['table-orders', tableId] });
             }
+        },
+        onError: () => {
+            toast.error('Payment failed. Please try again.');
         }
     });
 
     const handleConfirm = () => {
-        if (cart.items.length === 0) return;
+        if (cartSnapshot.items.length === 0) return;
         orderMutation.mutate({
-            tableId: cart.tableId || undefined,
-            items: cart.items.map(i => ({ menuItemId: i.menuItemId, quantity: i.quantity }))
+            tableId: cartSnapshot.tableId || undefined,
+            items: cartSnapshot.items.map(i => ({ menuItemId: i.menuItemId, quantity: i.quantity }))
         });
     };
 
@@ -110,7 +151,7 @@ export default function CheckoutPage() {
                         </h2>
                         <div className="card-default border-outline-variant/30 divide-y divide-outline-variant/20 p-0 overflow-hidden">
                             <div className="max-h-[400px] overflow-y-auto p-6 space-y-4">
-                                {cart.items.map(item => (
+                                {cartSnapshot.items.map(item => (
                                     <div key={item.menuItemId} className="flex justify-between items-center group">
                                         <div className="flex items-center gap-4">
                                             <div className="h-10 w-10 rounded-lg bg-surface-container flex items-center justify-center font-bold text-xs text-secondary">
@@ -122,6 +163,15 @@ export default function CheckoutPage() {
                                     </div>
                                 ))}
                             </div>
+
+                            {/* Order Note */}
+                            {orderNote && (
+                                <div className="px-6 py-4 bg-tertiary/5">
+                                    <p className="label-sm text-tertiary font-bold mb-1">Order Note</p>
+                                    <p className="body-sm text-on-surface-variant">{orderNote}</p>
+                                </div>
+                            )}
+
                             <div className="p-6 bg-surface-container-high/30 space-y-3">
                                 <div className="flex justify-between body-md">
                                     <span className="text-on-surface-variant">Subtotal</span>
@@ -177,7 +227,7 @@ export default function CheckoutPage() {
                         <div className="pt-8">
                             <button 
                                 onClick={handleConfirm}
-                                disabled={orderMutation.isPending || paymentMutation.isPending || cart.items.length === 0}
+                                disabled={orderMutation.isPending || paymentMutation.isPending || cartSnapshot.items.length === 0}
                                 className="btn-primary w-full !h-16 text-lg tracking-wider"
                             >
                                 {orderMutation.isPending || paymentMutation.isPending ? (
@@ -197,23 +247,19 @@ export default function CheckoutPage() {
     );
 }
 
-function PaymentMethodBtn({ active, onClick, icon: Icon, label }: any) {
+function PaymentMethodBtn({ active, onClick, icon: Icon, label }: { active: boolean; onClick: () => void; icon: React.ElementType; label: string }) {
     return (
         <button 
             onClick={onClick}
-            className={cn(
+            className={[
                 "flex flex-col items-center justify-center gap-3 h-32 rounded-2xl border-2 transition-all p-4",
                 active 
                     ? "bg-secondary/10 border-secondary text-secondary shadow-[0_0_20px_rgba(0,139,139,0.15)]" 
                     : "bg-surface-container border-outline-variant text-on-surface-variant hover:border-outline"
-            )}
+            ].filter(Boolean).join(' ')}
         >
             <Icon size={32} className="shrink-0" />
             <span className="text-[12px] font-bold uppercase tracking-widest text-center">{label}</span>
         </button>
     );
-}
-
-function cn(...inputs: any[]) {
-    return inputs.filter(Boolean).join(' ');
 }

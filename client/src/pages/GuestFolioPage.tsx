@@ -31,7 +31,7 @@ export default function GuestFolioPage() {
     });
 
     const checkoutMutation = useMutation({
-        mutationFn: (payload: any) => guestFolioService.checkoutFolio(roomId!, payload),
+        mutationFn: (payload: LooseValue) => guestFolioService.checkoutFolio(roomId!, payload),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['folio', roomId] });
             queryClient.invalidateQueries({ queryKey: ['checked-in-guests'] });

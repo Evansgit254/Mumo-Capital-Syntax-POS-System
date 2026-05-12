@@ -3,6 +3,7 @@ import { useStore } from '../../store/useStore';
 import { userService, shiftService, clockEventService } from '../../api/service';
 import { Role } from '@mumo/types';
 import { Clock, Calendar as CalendarIcon, Users, DollarSign, Edit2, Check, X, Plus } from 'lucide-react';
+import { toast } from 'react-hot-toast';
 import { format, startOfWeek, endOfWeek, addDays, isSameDay, differenceInMinutes } from 'date-fns';
 import FormField from '../../components/ui/FormField';
 
@@ -47,7 +48,7 @@ export default function WorkforcePage() {
             setShifts(shiftsRes);
             setClockEvents(clocksRes);
         } catch (error) {
-            console.error('Failed to load workforce data', error);
+            toast.error('Failed to load workforce data');
         } finally {
             setLoading(false);
         }
@@ -61,7 +62,7 @@ export default function WorkforcePage() {
                 setUsers(users.map(u => u.id === userId ? { ...u, hourlyRate: numRate } : u));
             }
         } catch (error) {
-            console.error('Failed to update rate', error);
+            toast.error('Failed to update rate');
         } finally {
             setEditingRateId(null);
         }
@@ -77,7 +78,7 @@ export default function WorkforcePage() {
         return total + (hours * (user.hourlyRate || 0));
     }, 0);
 
-    const openShiftModal = (userId: string, date: Date, existingShift: any = null) => {
+    const openShiftModal = (userId: string, date: Date, existingShift: LooseValue = null) => {
         setSelectedUserId(userId);
         setSelectedDate(date);
         setSelectedShift(existingShift);
@@ -116,7 +117,7 @@ export default function WorkforcePage() {
             setIsShiftModalOpen(false);
             fetchData();
         } catch (error) {
-            console.error('Failed to save shift', error);
+            toast.error('Failed to save shift');
         }
     };
 
@@ -126,7 +127,7 @@ export default function WorkforcePage() {
             setIsShiftModalOpen(false);
             fetchData();
         } catch (error) {
-            console.error('Failed to delete shift', error);
+            toast.error('Failed to delete shift');
         }
     };
 
@@ -141,8 +142,7 @@ export default function WorkforcePage() {
             });
             fetchData();
         } catch (error) {
-            console.error('Failed to create clock event', error);
-            alert('Failed to record clock event');
+            toast.error('Failed to record clock event');
         }
     };
 
@@ -340,7 +340,7 @@ export default function WorkforcePage() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-outline-variant">
-                                {clockEvents.map((event: any) => (
+                                {clockEvents.map((event: LooseValue) => (
                                     <tr key={event.id} className="hover:bg-surface-container-low/30 transition-colors">
                                         <td className="px-8 py-6 body-md font-medium text-on-surface">
                                             {format(new Date(event.timestamp), 'MMM d, yyyy • HH:mm:ss')}

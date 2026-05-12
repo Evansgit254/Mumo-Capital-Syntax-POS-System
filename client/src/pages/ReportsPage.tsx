@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import type { OrderItem } from '@mumo/types';
 import { useQuery } from '@tanstack/react-query';
 import { 
     Calendar, 
@@ -31,25 +32,19 @@ import {
     Pie
 } from 'recharts';
 import { orderService, paymentService, getErrorMessage } from '../api/service';
+import { downloadCSV } from '../lib/exportCsv';
 import Skeleton from '../components/ui/Skeleton';
+import toast from 'react-hot-toast';
 
-// Mock data for trends (In production, this would come from a dedicated analytics endpoint)
-const trendData = [
-    { name: 'Mon', revenue: 42000, orders: 45 },
-    { name: 'Tue', revenue: 38000, orders: 40 },
-    { name: 'Wed', revenue: 55000, orders: 62 },
-    { name: 'Thu', revenue: 48000, orders: 55 },
-    { name: 'Fri', revenue: 72000, orders: 88 },
-    { name: 'Sat', revenue: 85000, orders: 95 },
-    { name: 'Sun', revenue: 65000, orders: 70 },
-];
-
-const categoryData = [
-    { name: 'Food', value: 45, color: '#008B8B' },
-    { name: 'Beverages', value: 30, color: '#FFBF00' },
-    { name: 'Rooms', value: 15, color: '#6366F1' },
-    { name: 'Services', value: 10, color: '#EC4899' },
-];
+// Chart theme constants — extracted from inline hex values for maintainability
+const CHART_THEME = {
+    primary: '#008B8B',
+    accent: '#00BFBF',
+    text: '#9CA3AF',
+    tooltipBg: '#282a2b',
+    tooltipText: '#e2e2e2',
+    grid: '#555',
+} as const;
 
 const ReportsPage: React.FC = () => {
     const [timeframe, setTimeframe] = useState('7d');
@@ -65,14 +60,122 @@ const ReportsPage: React.FC = () => {
     });
 
     const stats = useMemo(() => {
-        if (!payments || !orders) return { revenue: 0, orders: 0, avgCheck: 0 };
-        const revenue = payments.reduce((sum, p) => sum + p.amount, 0);
+        if (!payments || !orders) return { 
+            revenue: 0, orders: 0, avgCheck: 0, guests: 0,
+            revenueTrend: '0%', ordersTrend: '0%', avgCheckTrend: '0%', guestTrend: '0%', guestCount: 0
+        };
+        
+        const today = new Date();
+        const weekAgo = new Date();
+        weekAgo.setDate(today.getDate() - 7);
+        const twoWeeksAgo = new Date();
+        twoWeeksAgo.setDate(today.getDate() - 14);
+
+        const currentPayments = payments.filter(p => new Date(p.createdAt) >= weekAgo);
+        const currentOrders = orders.filter(o => new Date(o.createdAt) >= weekAgo);
+        const currentRevenue = currentPayments.reduce((sum, p) => sum + p.amount, 0);
+
+        const prevPayments = payments.filter(p => {
+            const d = new Date(p.createdAt);
+            return d >= twoWeeksAgo && d < weekAgo;
+        });
+        const prevOrders = orders.filter(o => {
+            const d = new Date(o.createdAt);
+            return d >= twoWeeksAgo && d < weekAgo;
+        });
+        const prevRevenue = prevPayments.reduce((sum, p) => sum + p.amount, 0);
+
+        const calcTrend = (curr: number, prev: number) => {
+            if (prev === 0) return curr > 0 ? '+100%' : '0.0%';
+            const diff = ((curr - prev) / prev) * 100;
+            return `${diff >= 0 ? '+' : ''}${diff.toFixed(1)}%`;
+        };
+
         return {
-            revenue,
-            orders: orders.length,
-            avgCheck: orders.length > 0 ? revenue / orders.length : 0,
+            revenue: currentRevenue,
+            orders: currentOrders.length,
+            avgCheck: currentOrders.length > 0 ? currentRevenue / currentOrders.length : 0,
+            revenueTrend: calcTrend(currentRevenue, prevRevenue),
+            ordersTrend: calcTrend(currentOrders.length, prevOrders.length),
+            avgCheckTrend: calcTrend(currentOrders.length > 0 ? currentRevenue / currentOrders.length : 0, prevOrders.length > 0 ? prevRevenue / prevOrders.length : 0),
+            guestCount: currentOrders.length, // Proxy for guests
+            guestTrend: calcTrend(currentOrders.length, prevOrders.length)
         };
     }, [payments, orders]);
+
+    const trendData = useMemo(() => {
+        if (!payments) return [];
+        const today = new Date();
+        const weekAgo = new Date();
+        weekAgo.setDate(today.getDate() - 7);
+        
+        return payments
+            .filter(p => new Date(p.createdAt) >= weekAgo)
+            .reduce((acc, p) => {
+                const day = new Date(p.createdAt).toLocaleDateString('en-US', { weekday: 'short' });
+                const existing = acc.find(d => d.name === day);
+                if (existing) existing.revenue += p.amount;
+                else acc.push({ name: day, revenue: p.amount });
+                return acc;
+            }, [] as { name: string; revenue: number }[]);
+    }, [payments]);
+
+    const categoryData = useMemo(() => {
+        if (!orders) return [];
+        const counts: Record<string, number> = {};
+        let totalItems = 0;
+        
+        orders.forEach(o => {
+            if (!o.items) return;
+            o.items.forEach((item: OrderItem & { menuItem?: { categoryId?: string } }) => {
+                const cat = item.menuItem?.categoryId || 'Uncategorized';
+                counts[cat] = (counts[cat] || 0) + item.quantity;
+                totalItems += item.quantity;
+            });
+        });
+
+        if (totalItems === 0) return [];
+
+        const colors = ['var(--color-secondary)', 'var(--color-tertiary)', 'var(--color-error)', 'var(--color-primary)'];
+        return Object.entries(counts).map(([name, count], i) => ({
+            name,
+            value: Math.round((count / totalItems) * 100),
+            color: colors[i % colors.length]
+        }));
+    }, [orders]);
+
+    const handleExport = () => {
+        if (!payments && !orders) {
+            toast.error('No data available to export');
+            return;
+        }
+
+        const date = new Date().toISOString().split('T')[0];
+
+        const sections = [
+            {
+                header: 'Revenue Trends',
+                rows: trendData.map(d => ({ Day: d.name, 'Revenue (KES)': d.revenue })),
+            },
+            {
+                header: 'Category Breakdown',
+                rows: categoryData.map(c => ({ Category: c.name, 'Share (%)': c.value })),
+            },
+            {
+                header: 'Recent Payments',
+                rows: (payments || []).map((p: LooseValue) => ({
+                    'Order ID': p.orderId,
+                    'Amount (KES)': p.amount,
+                    Method: p.method,
+                    Status: p.status || 'SETTLED',
+                    Date: new Date(p.createdAt).toLocaleString(),
+                })),
+            },
+        ];
+
+        downloadCSV(`mumo-reports-${date}.csv`, sections);
+        toast.success('Report exported successfully');
+    };
 
     if (paymentsLoading || ordersLoading) {
         return <div className="p-10 space-y-10"><Skeleton className="h-20 w-64" /><Skeleton className="h-[600px] w-full rounded-3xl" /></div>;
@@ -94,7 +197,7 @@ const ReportsPage: React.FC = () => {
                             <ChevronDown size={16} />
                         </button>
                     </div>
-                    <button className="btn-primary flex items-center gap-2 shadow-lg shadow-primary/20">
+                    <button onClick={handleExport} className="btn-primary flex items-center gap-2 shadow-lg shadow-primary/20">
                         <Download size={18} />
                         Export
                     </button>
@@ -104,10 +207,10 @@ const ReportsPage: React.FC = () => {
             {/* Quick Stats */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {[
-                    { label: 'Total Revenue', value: `KES ${stats.revenue.toLocaleString()}`, trend: '+12.5%', icon: DollarSign, color: 'text-primary', bg: 'bg-primary/10' },
-                    { label: 'Total Orders', value: stats.orders, trend: '+8.2%', icon: BarChart3, color: 'text-secondary', bg: 'bg-secondary/10' },
-                    { label: 'Avg. Check', value: `KES ${Math.round(stats.avgCheck).toLocaleString()}`, trend: '-2.1%', icon: Activity, color: 'text-tertiary', bg: 'bg-tertiary/10' },
-                    { label: 'Guest Growth', value: '+142', trend: '+18%', icon: Users, color: 'text-primary', bg: 'bg-primary/10' },
+                    { label: 'Total Revenue', value: `KES ${stats.revenue.toLocaleString()}`, trend: stats.revenueTrend, icon: DollarSign, color: 'text-primary', bg: 'bg-primary/10' },
+                    { label: 'Total Orders', value: stats.orders, trend: stats.ordersTrend, icon: BarChart3, color: 'text-secondary', bg: 'bg-secondary/10' },
+                    { label: 'Avg. Check', value: `KES ${Math.round(stats.avgCheck).toLocaleString()}`, trend: stats.avgCheckTrend, icon: Activity, color: 'text-tertiary', bg: 'bg-tertiary/10' },
+                    { label: 'Guest Growth', value: `+${stats.guestCount}`, trend: stats.guestTrend, icon: Users, color: 'text-primary', bg: 'bg-primary/10' },
                 ].map((stat, i) => (
                     <div key={i} className="card-default p-6 space-y-4 hover:border-primary/30 transition-all duration-300">
                         <div className="flex justify-between items-start">
@@ -137,8 +240,8 @@ const ReportsPage: React.FC = () => {
                             <span className="label-sm bg-primary/10 text-primary px-3 py-1 rounded-full">LIVE</span>
                         </h3>
                         <div className="flex gap-2">
-                             {['Week', 'Month', 'Year'].map(t => (
-                                 <button key={t} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${t === 'Week' ? 'bg-primary text-on-primary' : 'hover:bg-surface-container-high text-on-surface-variant'}`}>{t}</button>
+                             {[{ label: 'Week', key: '7d' }, { label: 'Month', key: '30d' }, { label: 'Year', key: '365d' }].map(t => (
+                                 <button key={t.key} onClick={() => setTimeframe(t.key)} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${timeframe === t.key ? 'bg-primary text-on-primary' : 'hover:bg-surface-container-high text-on-surface-variant'}`}>{t.label}</button>
                              ))}
                         </div>
                     </div>
@@ -147,41 +250,48 @@ const ReportsPage: React.FC = () => {
                             <AreaChart data={trendData}>
                                 <defs>
                                     <linearGradient id="colorRev" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.3}/>
-                                        <stop offset="95%" stopColor="var(--primary)" stopOpacity={0}/>
+                                        <stop offset="5%" stopColor={CHART_THEME.primary} stopOpacity={0.4}/>
+                                        <stop offset="50%" stopColor={CHART_THEME.primary} stopOpacity={0.15}/>
+                                        <stop offset="95%" stopColor={CHART_THEME.primary} stopOpacity={0}/>
                                     </linearGradient>
                                 </defs>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--outline-variant)" opacity={0.5} />
+                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_THEME.grid} opacity={0.6} />
                                 <XAxis 
                                     dataKey="name" 
                                     axisLine={false} 
                                     tickLine={false} 
-                                    tick={{ fill: 'var(--on-hint)', fontSize: 12, fontWeight: 600 }}
+                                    tick={{ fill: CHART_THEME.text, fontSize: 13, fontWeight: 600 }}
                                     dy={10}
                                 />
                                 <YAxis 
                                     axisLine={false} 
                                     tickLine={false} 
-                                    tick={{ fill: 'var(--on-hint)', fontSize: 12, fontWeight: 600 }}
-                                    tickFormatter={(val) => `K${val/1000}k`}
+                                    tick={{ fill: CHART_THEME.text, fontSize: 13, fontWeight: 600 }}
+                                    tickFormatter={(val) => val >= 1000 ? `${(val/1000).toFixed(0)}K` : `${val}`}
+                                    width={60}
                                 />
                                 <Tooltip 
                                     contentStyle={{ 
-                                        backgroundColor: 'var(--surface-container-high)', 
-                                        border: '1px solid var(--outline-variant)',
+                                        backgroundColor: CHART_THEME.tooltipBg, 
+                                        border: `1px solid ${CHART_THEME.grid}`,
                                         borderRadius: '16px',
-                                        boxShadow: '0 10px 30px rgba(0,0,0,0.5)'
+                                        boxShadow: '0 10px 30px rgba(0,0,0,0.5)',
+                                        color: CHART_THEME.tooltipText
                                     }}
-                                    itemStyle={{ color: 'var(--on-surface)', fontWeight: 700 }}
+                                    itemStyle={{ color: CHART_THEME.accent, fontWeight: 700 }}
+                                    labelStyle={{ color: CHART_THEME.text, fontWeight: 600, marginBottom: 4 }}
+                                    formatter={(value) => [`KES ${Number(value).toLocaleString()}`, 'Revenue']}
                                 />
                                 <Area 
                                     type="monotone" 
                                     dataKey="revenue" 
-                                    stroke="var(--primary)" 
-                                    strokeWidth={4}
+                                    stroke={CHART_THEME.accent} 
+                                    strokeWidth={3}
                                     fillOpacity={1} 
                                     fill="url(#colorRev)" 
                                     animationDuration={2000}
+                                    dot={{ r: 5, fill: CHART_THEME.primary, stroke: CHART_THEME.accent, strokeWidth: 2 }}
+                                    activeDot={{ r: 7, fill: CHART_THEME.accent, stroke: '#fff', strokeWidth: 2 }}
                                 />
                             </AreaChart>
                         </ResponsiveContainer>
@@ -203,11 +313,14 @@ const ReportsPage: React.FC = () => {
                                     <Pie
                                         data={categoryData}
                                         cx="50%"
-                                        cy="50%"
-                                        innerRadius={80}
-                                        outerRadius={120}
+                                        cy="55%"
+                                        innerRadius={65}
+                                        outerRadius={95}
                                         paddingAngle={5}
                                         dataKey="value"
+                                        stroke="none"
+                                        animationBegin={0}
+                                        animationDuration={1500}
                                     >
                                         {categoryData.map((entry, index) => (
                                             <Cell key={`cell-${index}`} fill={entry.color} stroke="none" />
@@ -236,13 +349,13 @@ const ReportsPage: React.FC = () => {
             <div className="card-default p-8 space-y-6">
                 <div className="flex items-center justify-between">
                     <h3 className="headline-sm font-bold">Recent Financial Activity</h3>
-                    <button className="text-primary label-sm font-bold flex items-center gap-2 hover:gap-3 transition-all">
+                    <button onClick={() => toast('Full transaction ledger coming soon', { icon: '📊' })} className="text-primary label-sm font-bold flex items-center gap-2 hover:gap-3 transition-all">
                         VIEW ALL TRANSACTIONS
                         <ArrowRight size={16} />
                     </button>
                 </div>
                 <div className="divide-y divide-outline-variant">
-                    {payments?.slice(0, 5).map((payment: any, i: number) => (
+                    {payments?.slice(0, 5).map((payment: LooseValue, i: number) => (
                         <div key={i} className="py-5 flex items-center justify-between group cursor-pointer hover:px-2 transition-all">
                             <div className="flex items-center gap-5">
                                 <div className="p-3 bg-surface-container-high rounded-2xl group-hover:bg-primary/10 group-hover:text-primary transition-colors">

@@ -21,7 +21,7 @@ import Skeleton from '../../components/ui/Skeleton';
 import TableMapPage from '../TableMapPage';
 
 const GRID_SIZE = 20;
-const ZONES = ['Indoor', 'Outdoor', 'Bar', 'Pool'];
+// ZONES will be derived dynamically below
 
 export default function TableManagementPage() {
     const queryClient = useQueryClient();
@@ -46,7 +46,7 @@ export default function TableManagementPage() {
     }, [tablesQuery.data]);
 
     const batchUpdateMutation = useMutation({
-        mutationFn: (tables: any[]) => tableService.batchUpdate(tables),
+        mutationFn: (tables: LooseValue[]) => tableService.batchUpdate(tables),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['tables'] });
             showToast('Floor plan saved successfully', 'success');
@@ -138,6 +138,7 @@ export default function TableManagementPage() {
         }
     };
 
+    const zones = Array.from(new Set(localTables.map(t => t.zone).filter(Boolean))) as string[];
     const selectedTable = localTables.find(t => t.id === selectedTableId);
 
     return (
@@ -198,7 +199,7 @@ export default function TableManagementPage() {
                             <Layers size={14} /> Zones
                         </h3>
                         <div className="grid grid-cols-2 gap-2">
-                            {ZONES.map(z => (
+                            {zones.map(z => (
                                 <button key={z} className="h-10 rounded-lg border border-outline-variant text-[10px] font-bold uppercase tracking-widest hover:border-secondary transition-colors">
                                     {z}
                                 </button>
@@ -225,7 +226,7 @@ export default function TableManagementPage() {
                             gridTemplateColumns: `repeat(${GRID_SIZE}, 40px)`,
                             gridTemplateRows: `repeat(${GRID_SIZE}, 40px)`,
                             gap: '1px',
-                            background: '#f0f0f0'
+                            background: 'var(--inverse-surface)'
                         }}
                     >
                         {/* Grid lines */}
@@ -303,13 +304,17 @@ export default function TableManagementPage() {
 
                                 <div className="space-y-4">
                                     <label className="label-sm font-bold text-on-surface-variant uppercase tracking-widest">Zone / Section</label>
-                                    <select 
+                                    <input 
+                                        type="text"
+                                        list="zone-list"
                                         value={selectedTable.zone}
                                         onChange={(e) => setLocalTables(prev => prev.map(t => t.id === selectedTableId ? { ...t, zone: e.target.value } : t))}
                                         className="input-field"
-                                    >
-                                        {ZONES.map(z => <option key={z} value={z}>{z}</option>)}
-                                    </select>
+                                        placeholder="e.g. Indoor, Patio..."
+                                    />
+                                    <datalist id="zone-list">
+                                        {zones.map(z => <option key={z} value={z} />)}
+                                    </datalist>
                                 </div>
 
                                 <div className="space-y-4">
@@ -380,6 +385,6 @@ export default function TableManagementPage() {
     );
 }
 
-function cn(...inputs: any[]) {
+function cn(...inputs: LooseValue[]) {
     return inputs.filter(Boolean).join(' ');
 }

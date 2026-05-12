@@ -1,4 +1,5 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient as Client } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 
 /**
  * Singleton PrismaClient.
@@ -9,7 +10,7 @@ const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 
 export const prisma =
     globalForPrisma.prisma ||
-    new PrismaClient({
+    new Client({
         log: process.env.NODE_ENV === 'development' ? ['query', 'warn', 'error'] : ['error'],
     });
 

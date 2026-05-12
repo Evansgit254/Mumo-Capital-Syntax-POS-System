@@ -50,6 +50,24 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
     }
 });
 
+// ── GET /api/menus/:id/modifiers ─────────────────────────────────────────────
+router.get('/:id/modifiers', async (req: Request, res: Response, next: NextFunction) => {
+    try {
+        const { tenantId } = req.user!;
+        // Verify item exists for this tenant
+        const item = await prisma.menuItem.findFirst({
+            where: { id: req.params.id, tenantId },
+        });
+        if (!item) throw notFound('Menu item not found');
+        
+        // Return empty array as modifiers are not yet in the data model
+        // but the client requires this dynamic endpoint.
+        res.json([]);
+    } catch (err) {
+        next(err);
+    }
+});
+
 // ── POST /api/menus ──────────────────────────────────────────────────────────
 router.post(
     '/',

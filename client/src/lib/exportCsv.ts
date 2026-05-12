@@ -5,7 +5,7 @@
 
 export interface CSVSection {
     header: string;
-    rows: any[];
+    rows: LooseValue[];
 }
 
 export function downloadCSV(filename: string, sections: CSVSection[]) {

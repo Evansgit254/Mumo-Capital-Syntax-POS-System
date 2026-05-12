@@ -30,6 +30,7 @@ import GuestDirectoryPage from './pages/GuestDirectoryPage';
 import GuestFolioPage from './pages/GuestFolioPage';
 import WorkforcePage from './pages/admin/WorkforcePage';
 import ExecutiveAnalyticsPage from './pages/admin/ExecutiveAnalyticsPage';
+import NotFoundPage from './pages/NotFoundPage';
 import { Role } from '@mumo/types';
 
 function App() {
@@ -101,7 +102,7 @@ function App() {
                 </Route>
 
                 {/* Fallback */}
-                <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                <Route path="*" element={<NotFoundPage />} />
             </Routes>
         </Router>
     );

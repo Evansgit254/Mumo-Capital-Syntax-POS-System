@@ -9,8 +9,8 @@ import { Role, OrderStatus } from '@mumo/types';
 
 const router = Router();
 
-// ── POST /public (Guest Facing) ──────────────────────────────────────────────
-router.post('/', async (req: Request, res: Response, next: NextFunction) => {
+// ── POST /public/orders/external (Guest Facing) ─────────────────────────────
+router.post('/external', async (req: Request, res: Response, next: NextFunction) => {
     try {
         const tenantId = req.headers['x-tenant-id'] as string;
         const { tableId, items } = req.body;
@@ -39,7 +39,7 @@ router.post('/', async (req: Request, res: Response, next: NextFunction) => {
         });
 
         const totalAmount = orderItems.reduce(
-            (sum: Prisma.Decimal, oi: any) => sum.plus(oi.subtotal),
+            (sum: Prisma.Decimal, oi: LooseValue) => sum.plus(oi.subtotal),
             new Prisma.Decimal(0)
         );
 
@@ -78,7 +78,7 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
         const orders = await prisma.order.findMany({
             where: { tenantId },
             include: {
-                items: { include: { menuItem: { select: { name: true } } } },
+                items: { include: { menuItem: { select: { name: true, categoryId: true } } } },
                 table: { select: { number: true } },
                 user: { select: { firstName: true, lastName: true } },
                 payments: { select: { method: true, amount: true, status: true } },
@@ -226,7 +226,7 @@ router.post(
             });
 
             const totalAmount = orderItems.reduce(
-                (sum: Prisma.Decimal, oi: any) => sum.plus(oi.subtotal),
+                (sum: Prisma.Decimal, oi: LooseValue) => sum.plus(oi.subtotal),
                 new Prisma.Decimal(0)
             );
 
