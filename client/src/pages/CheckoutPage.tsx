@@ -86,6 +86,8 @@ export default function CheckoutPage() {
                 queryClient.invalidateQueries({ queryKey: ['table', tableId] });
                 queryClient.invalidateQueries({ queryKey: ['table-orders', tableId] });
             }
+            // Always invalidate KDS live orders
+            queryClient.invalidateQueries({ queryKey: ['orders-live'] });
         },
         onError: () => {
             toast.error('Payment failed. Please try again.');

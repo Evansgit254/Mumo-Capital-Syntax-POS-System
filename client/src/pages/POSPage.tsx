@@ -111,9 +111,10 @@ export default function POSPage() {
                 icon: '👨‍🍳'
             });
             
-            // For table orders, we might want to keep the cart or clear it.
-            // Usually, if they haven't paid yet, we keep the table session active.
-            // But this specific POS seems to use the global cart for everything.
+            // Invalidate relevant queries to update KDS and other views
+            queryClient.invalidateQueries({ queryKey: ['orders'] });
+            queryClient.invalidateQueries({ queryKey: ['orders-live'] });
+
             // Let's clear the cart but stay on the page.
             cart.clearCart();
             setOrderNote('');

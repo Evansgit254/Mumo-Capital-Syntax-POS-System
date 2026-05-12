@@ -13,7 +13,10 @@ import {
     AlertCircle,
     Trash2,
     Info,
-    XCircle
+    XCircle,
+    RefreshCw,
+    Play,
+    User
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import EmptyState from '../components/ui/EmptyState';
@@ -74,6 +77,14 @@ export default function KDSPage() {
                     <p className="body-lg text-on-surface-variant">Active orders and preparation priority.</p>
                 </div>
                 <div className="flex items-center gap-4">
+                    <button 
+                        onClick={() => kdsQuery.refetch()}
+                        disabled={kdsQuery.isFetching}
+                        className="h-11 px-6 rounded-xl bg-surface-container-high text-on-surface label-md flex items-center gap-2 hover:bg-surface-container-highest transition-all disabled:opacity-50"
+                    >
+                        <RefreshCw size={18} className={kdsQuery.isFetching ? 'animate-spin' : ''} />
+                        <span>Refresh</span>
+                    </button>
                     <div className="pill-status bg-secondary/10 text-secondary border border-secondary/20">
                         <LayoutGrid size={14} />
                         <span>GRID VIEW</span>
@@ -124,7 +135,7 @@ function OrderCard({
     setOpenMenuId: (id: string | null) => void 
 }) {
     const createdAt = new Date(order.createdAt);
-    const elapsedMinutes = Math.floor((now.getTime() - createdAt.getTime()) / 60000);
+    const elapsedMinutes = Math.max(0, Math.floor((now.getTime() - createdAt.getTime()) / 60000)) || 0;
 
     // Color-coded urgency
     let urgencyClass = "border-outline-variant";
@@ -202,7 +213,7 @@ function OrderCard({
                             {item.quantity}x
                         </div>
                         <div className="flex-1 min-w-0">
-                            <p className="body-md font-bold text-on-surface truncate leading-tight">{item.menuItem?.name}</p>
+                            <p className="body-md font-bold text-on-surface truncate leading-tight">{item.menuItem?.name || 'Item Removed'}</p>
                             {item.notes && (
                                 <p className="text-[11px] text-on-surface-variant/70 italic truncate">
                                     {item.notes}
