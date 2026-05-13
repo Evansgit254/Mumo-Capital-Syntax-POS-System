@@ -2,7 +2,7 @@
 builder = "nixpacks"
 
 [deploy]
-startCommand = "npx prisma migrate deploy --schema server/prisma/schema.prisma && node server/dist/src/index.js"
+startCommand = "npx prisma migrate deploy --schema server/prisma/schema.prisma && npx tsx server/src/index.ts"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
 restartPolicyType = "on_failure"
