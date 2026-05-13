@@ -33,6 +33,7 @@ import activityBookingsRoutes from './routes/activity-bookings';
 import vendorRoutes from './routes/vendors';
 
 const app = express();
+app.set("trust proxy", 1);
 const port = process.env.PORT || 5000;
 const rawOrigins = (process.env.ALLOWED_ORIGINS || process.env.FRONTEND_URL || '').split(',')
     .map(o => o.trim())
