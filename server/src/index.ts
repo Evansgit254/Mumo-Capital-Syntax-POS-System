@@ -155,7 +155,7 @@ const server = app.listen(port, () => {
 
 // ── Static Assets (Client) ──────────────────────────────────────────────────
 if (process.env.NODE_ENV === 'production') {
-    const clientDist = path.join(__dirname, '../../../client/dist');
+    const clientDist = path.join(process.cwd(), 'client/dist');
     app.use(express.static(clientDist));
     app.get('*', (req, res) => {
         // If it looks like an API call, don't serve index.html (safety)
