@@ -5,7 +5,7 @@
     "scripts": {
         "start": "node dist/index.js",
         "dev": "tsx src/index.ts",
-        "build": "tsc",
+        "build": "prisma generate && tsc",
         "test": "vitest run",
         "test:watch": "vitest",
         "prisma:generate": "prisma generate",
@@ -45,5 +45,8 @@
     },
     "prisma": {
         "seed": "tsx prisma/seed.ts"
+    },
+    "engines": {
+        "node": ">=20"
     }
 }
