@@ -130,8 +130,6 @@ router.get('/live', async (req: Request, res: Response, next: NextFunction) => {
             orderBy: { createdAt: 'asc' },
         });
 
-        logger.info({ tenantId, count: orders.length }, 'Fetched live orders for KDS');
-
         const serialized = orders.map(order => ({
             ...order,
             totalAmount: order.totalAmount.toNumber(),

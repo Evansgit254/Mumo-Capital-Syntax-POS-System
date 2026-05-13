@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { menuService, tableService, tenantService, orderService } from '../api/service';
 import { useStore } from '../store/useStore';
 import { 
@@ -38,6 +38,7 @@ import toast from 'react-hot-toast';
 
 export default function POSPage() {
     const navigate = useNavigate();
+    const queryClient = useQueryClient();
     const { cart } = useStore();
     const [searchQuery, setSearchQuery] = useState('');
     const [activeCategory, setActiveCategory] = useState<string | null>(null);

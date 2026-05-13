@@ -8,6 +8,8 @@ import cookieParser from 'cookie-parser';
 
 import { authenticate, extractTenant } from './middleware/auth';
 import { errorHandler } from './middleware/errorHandler';
+import { logger } from './lib/logger';
+import { prisma } from './lib/prisma';
 
 import authRoutes from './routes/auth';
 import menuRoutes from './routes/menus';
@@ -96,7 +98,7 @@ app.use('/api/vendors', authenticate, vendorRoutes);
 app.use(errorHandler);
 
 // ── Startup ──────────────────────────────────────────────────────────────────
-app.listen(port, () => {
+const server = app.listen(port, () => {
     console.log(`\n🚀 Mumo POS Server running on http://localhost:${port}\n`);
     console.log('Registered routes:');
     console.log('  PUBLIC:');
@@ -149,5 +151,22 @@ app.listen(port, () => {
     console.log('    PUT    /api/roles/:role/permissions');
     console.log('');
 });
+
+// ── Graceful Shutdown ────────────────────────────────────────────────────────
+const shutdown = async (signal: string) => {
+    logger.info(`${signal} received — shutting down gracefully`);
+    server.close(async () => {
+        await prisma.$disconnect();
+        logger.info('Server closed and database disconnected');
+        process.exit(0);
+    });
+    setTimeout(() => {
+        logger.error('Forced shutdown after timeout');
+        process.exit(1);
+    }, 10000);
+};
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
 
 export default app;
