@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import path from 'path';
 
 import express from 'express';
 import cors from 'cors';
@@ -151,6 +152,19 @@ const server = app.listen(port, () => {
     console.log('    PUT    /api/roles/:role/permissions');
     console.log('');
 });
+
+// ── Static Assets (Client) ──────────────────────────────────────────────────
+if (process.env.NODE_ENV === 'production') {
+    const clientDist = path.join(__dirname, '../../../client/dist');
+    app.use(express.static(clientDist));
+    app.get('*', (req, res) => {
+        // If it looks like an API call, don't serve index.html (safety)
+        if (req.path.startsWith('/api') || req.path.startsWith('/auth')) {
+            return res.status(404).json({ error: 'Not Found' });
+        }
+        res.sendFile(path.join(clientDist, 'index.html'));
+    });
+}
 
 // ── Graceful Shutdown ────────────────────────────────────────────────────────
 const shutdown = async (signal: string) => {
