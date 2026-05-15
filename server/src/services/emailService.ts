@@ -1,19 +1,8 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import { logger } from '../lib/logger';
 
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: process.env.SMTP_PORT === '465', // Use SSL/TLS for port 465
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-  // Add timeouts to prevent hanging the server
-  connectionTimeout: 5000, // 5 seconds
-  greetingTimeout: 5000,
-  socketTimeout: 10000,
-});
+// Use the API key from SMTP_PASS (or RESEND_API_KEY if you set it later)
+const resend = new Resend(process.env.SMTP_PASS || process.env.RESEND_API_KEY);
 
 export async function sendApplicationReceived(data: {
   to: string;
@@ -22,9 +11,9 @@ export async function sendApplicationReceived(data: {
   applicationId: string;
 }) {
   try {
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || 'noreply@mumo.app',
-      to: data.to,
+    const { error } = await resend.emails.send({
+      from: process.env.SMTP_FROM || 'onboarding@resend.dev',
+      to: [data.to],
       subject: 'Mumo POS — Application Received',
       html: `
         <div style="font-family:Inter,sans-serif;
@@ -42,7 +31,7 @@ export async function sendApplicationReceived(data: {
           <p style="color:#8e9192">Application ID: 
              <code>${data.applicationId}</code></p>
           <p>You can track your status at:<br/>
-             <a href="${process.env.VITE_CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:5173'}/register/status/${data.applicationId}"
+             <a href="${process.env.VITE_CLIENT_URL || 'http://localhost:5173'}/register/status/${data.applicationId}"
                 style="color:#6fd7d6">
                Check Application Status
              </a>
@@ -54,10 +43,12 @@ export async function sendApplicationReceived(data: {
         </div>
       `,
     });
+
+    if (error) throw error;
     logger.info({ applicationId: data.applicationId }, 'Application received email sent');
     return true;
   } catch (err) {
-    logger.error({ err, applicationId: data.applicationId }, 'Failed to send application received email');
+    logger.error({ err, applicationId: data.applicationId }, 'Failed to send application received email via Resend API');
     return false;
   }
 }
@@ -71,9 +62,9 @@ export async function sendApplicationApproved(data: {
   tempPassword: string;
 }) {
   try {
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || 'noreply@mumo.app',
-      to: data.to,
+    const { error } = await resend.emails.send({
+      from: process.env.SMTP_FROM || 'onboarding@resend.dev',
+      to: [data.to],
       subject: 'Mumo POS — Your Account is Ready',
       html: `
         <div style="font-family:Inter,sans-serif;
@@ -119,10 +110,12 @@ export async function sendApplicationApproved(data: {
         </div>
       `,
     });
+
+    if (error) throw error;
     logger.info({ organizationName: data.organizationName }, 'Application approved email sent');
     return true;
   } catch (err) {
-    logger.error({ err, organizationName: data.organizationName }, 'Failed to send application approved email');
+    logger.error({ err, organizationName: data.organizationName }, 'Failed to send application approved email via Resend API');
     return false;
   }
 }
@@ -134,9 +127,9 @@ export async function sendApplicationRejected(data: {
   reason: string;
 }) {
   try {
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || 'noreply@mumo.app',
-      to: data.to,
+    const { error } = await resend.emails.send({
+      from: process.env.SMTP_FROM || 'onboarding@resend.dev',
+      to: [data.to],
       subject: 'Mumo POS — Application Update',
       html: `
         <div style="font-family:Inter,sans-serif;
@@ -169,6 +162,8 @@ export async function sendApplicationRejected(data: {
         </div>
       `,
     });
+
+    if (error) throw error;
     logger.info({ organizationName: data.organizationName }, 'Application rejection email sent');
     return true;
   } catch (err) {
@@ -186,12 +181,12 @@ export async function sendSuperAdminNotification(data: {
   applicationId: string;
 }) {
   const superAdminEmail = process.env.SUPER_ADMIN_EMAIL;
-  if (!superAdminEmail) return;
+  if (!superAdminEmail) return false;
 
   try {
-    await transporter.sendMail({
-      from: process.env.SMTP_FROM || 'noreply@mumo.app',
-      to: superAdminEmail,
+    const { error } = await resend.emails.send({
+      from: process.env.SMTP_FROM || 'onboarding@resend.dev',
+      to: [superAdminEmail],
       subject: `New Application: ${data.organizationName}`,
       html: `
         <div style="font-family:Inter,sans-serif;
@@ -224,7 +219,7 @@ export async function sendSuperAdminNotification(data: {
               <td>${data.country}</td>
             </tr>
           </table>
-          <a href="${process.env.VITE_CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:5173'}/super-admin/applications"
+          <a href="${process.env.VITE_CLIENT_URL || 'http://localhost:5173'}/super-admin/applications"
              style="display:inline-block;margin-top:24px;
                     background:#008B8B;color:#fff;
                     padding:12px 24px;border-radius:8px;
@@ -238,8 +233,12 @@ export async function sendSuperAdminNotification(data: {
         </div>
       `,
     });
+
+    if (error) throw error;
     logger.info({ applicationId: data.applicationId }, 'Super admin notification sent');
+    return true;
   } catch (err) {
     logger.error({ err }, 'Failed to send super admin notification');
+    return false;
   }
 }
