@@ -55,8 +55,10 @@ export async function sendApplicationReceived(data: {
       `,
     });
     logger.info({ applicationId: data.applicationId }, 'Application received email sent');
+    return true;
   } catch (err) {
     logger.error({ err, applicationId: data.applicationId }, 'Failed to send application received email');
+    return false;
   }
 }
 
@@ -118,8 +120,10 @@ export async function sendApplicationApproved(data: {
       `,
     });
     logger.info({ organizationName: data.organizationName }, 'Application approved email sent');
+    return true;
   } catch (err) {
     logger.error({ err, organizationName: data.organizationName }, 'Failed to send application approved email');
+    return false;
   }
 }
 
@@ -166,8 +170,10 @@ export async function sendApplicationRejected(data: {
       `,
     });
     logger.info({ organizationName: data.organizationName }, 'Application rejection email sent');
+    return true;
   } catch (err) {
     logger.error({ err, organizationName: data.organizationName }, 'Failed to send application rejection email');
+    return false;
   }
 }
 

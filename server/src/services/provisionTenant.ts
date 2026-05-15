@@ -101,7 +101,7 @@ export async function provisionTenant(
   // 6. Send welcome email outside transaction
   const clientUrl = process.env.VITE_CLIENT_URL || process.env.FRONTEND_URL || 'http://localhost:5173';
   const loginUrl = `${clientUrl}/login`;
-  await sendApplicationApproved({
+  const emailSent = await sendApplicationApproved({
     to: app.adminEmail,
     name: app.adminFirstName,
     organizationName: app.organizationName,
@@ -111,9 +111,9 @@ export async function provisionTenant(
   });
 
   logger.info(
-    { tenantId: result.tenant.id, domain: app.domain },
+    { tenantId: result.tenant.id, domain: app.domain, emailSent },
     'Tenant provisioned successfully'
   );
 
-  return result;
+  return { ...result, emailSent };
 }

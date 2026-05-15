@@ -252,9 +252,12 @@ router.post(
       );
 
       res.json({
-        message: 'Application approved and tenant provisioned',
+        message: result.emailSent 
+          ? 'Application approved and client notified.' 
+          : 'Application approved, but failed to send notification email.',
         tenantId: result.tenant.id,
         domain: result.tenant.domain,
+        emailSent: result.emailSent
       });
     } catch (err) {
       next(err);
@@ -296,16 +299,19 @@ router.post(
         },
       });
 
-      sendApplicationRejected({
+      const emailSent = await sendApplicationRejected({
         to: app.adminEmail,
         name: app.adminFirstName,
         organizationName: app.organizationName,
         reason,
-      }).catch(err =>
-        logger.error({ err }, 'Failed to send rejection email')
-      );
+      });
 
-      res.json({ message: 'Application rejected' });
+      res.json({ 
+        message: emailSent 
+          ? 'Application rejected and client notified.' 
+          : 'Application rejected, but failed to send notification email.',
+        emailSent 
+      });
     } catch (err) {
       next(err);
     }

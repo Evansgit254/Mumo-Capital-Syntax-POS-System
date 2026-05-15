@@ -101,8 +101,18 @@ export default function ApplicationsPage() {
   const handleApprove = async (id: string) => {
     setActionLoading(id);
     try {
-      await api().post(`/api/onboarding/applications/${id}/approve`);
-      toast.success('Tenant provisioned successfully');
+      const { data } = await api().post(`/api/onboarding/applications/${id}/approve`);
+      
+      if (data.emailSent) {
+        toast.success('Tenant provisioned and client notified');
+      } else {
+        toast.success('Tenant provisioned successfully');
+        toast.error('Warning: Failed to send notification email. Please reach out manually.', {
+          duration: 6000,
+          icon: '⚠️'
+        });
+      }
+
       fetchApplications();
       setExpandedId(null);
     } catch (err: any) {
@@ -119,10 +129,20 @@ export default function ApplicationsPage() {
     }
     setActionLoading(rejectingId);
     try {
-      await api().post(`/api/onboarding/applications/${rejectingId}/reject`, {
+      const { data } = await api().post(`/api/onboarding/applications/${rejectingId}/reject`, {
         reason: rejectReason.trim(),
       });
-      toast.success('Application rejected');
+
+      if (data.emailSent) {
+        toast.success('Application rejected and client notified');
+      } else {
+        toast.success('Application rejected');
+        toast.error('Warning: Failed to send rejection email.', {
+          duration: 6000,
+          icon: '⚠️'
+        });
+      }
+
       setRejectingId(null);
       setRejectReason('');
       fetchApplications();
