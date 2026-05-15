@@ -3,7 +3,7 @@ import { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { authService, getErrorMessage } from '../api/service';
-import { Loader2, CheckCircle2 } from 'lucide-react';
+import { Loader2, CheckCircle2, Eye, EyeOff } from 'lucide-react';
 import FormField from '../components/ui/FormField';
 
 export default function LoginPage() {
@@ -14,6 +14,7 @@ export default function LoginPage() {
     const [password, setPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [showPassword, setShowPassword] = useState(false);
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
@@ -135,20 +136,31 @@ export default function LoginPage() {
                         >
                             <div className="relative group">
                                 <input
-                                    type="password"
+                                    type={showPassword ? "text" : "password"}
                                     required
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="input-field pr-12"
+                                    className="input-field !pr-28"
                                     placeholder="••••••••"
                                     autoComplete="current-password"
                                 />
-                                <button
-                                    type="button"
-                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-secondary body-md font-semibold hover:opacity-80 transition-opacity"
-                                >
-                                    Forgot?
-                                </button>
+                                <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setShowPassword(!showPassword)}
+                                        className="text-on-surface-variant/40 hover:text-secondary transition-colors focus:outline-none"
+                                        title={showPassword ? "Hide password" : "Show password"}
+                                    >
+                                        {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                                    </button>
+                                    <div className="h-4 w-[1px] bg-outline-variant/30" />
+                                    <button
+                                        type="button"
+                                        className="text-secondary body-md font-semibold hover:opacity-80 transition-opacity"
+                                    >
+                                        Forgot?
+                                    </button>
+                                </div>
                             </div>
                         </FormField>
 
