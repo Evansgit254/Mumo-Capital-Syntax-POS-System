@@ -9,6 +9,10 @@ const transporter = nodemailer.createTransport({
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
   },
+  // Add timeouts to prevent hanging the server
+  connectionTimeout: 5000, // 5 seconds
+  greetingTimeout: 5000,
+  socketTimeout: 10000,
 });
 
 export async function sendApplicationReceived(data: {
@@ -64,54 +68,59 @@ export async function sendApplicationApproved(data: {
   loginUrl: string;
   tempPassword: string;
 }) {
-  await transporter.sendMail({
-    from: process.env.SMTP_FROM || 'noreply@mumo.app',
-    to: data.to,
-    subject: 'Mumo POS — Your Account is Ready',
-    html: `
-      <div style="font-family:Inter,sans-serif;
-                  background:#121414;color:#e2e2e2;
-                  padding:40px;max-width:600px">
-        <h1 style="color:#6fd7d6;font-size:24px">
-          Welcome to Mumo POS
-        </h1>
-        <p>Hi ${data.name},</p>
-        <p>Your property <strong>${data.organizationName}</strong> 
-           has been approved and provisioned.</p>
-        <div style="background:#1e2020;border:1px solid #444748;
-                    border-radius:8px;padding:24px;margin:24px 0">
-          <p style="margin:0 0 8px;color:#8e9192;font-size:12px;
-                    text-transform:uppercase;letter-spacing:0.05em">
-            YOUR LOGIN DETAILS
+  try {
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || 'noreply@mumo.app',
+      to: data.to,
+      subject: 'Mumo POS — Your Account is Ready',
+      html: `
+        <div style="font-family:Inter,sans-serif;
+                    background:#121414;color:#e2e2e2;
+                    padding:40px;max-width:600px">
+          <h1 style="color:#6fd7d6;font-size:24px">
+            Welcome to Mumo POS
+          </h1>
+          <p>Hi ${data.name},</p>
+          <p>Your property <strong>${data.organizationName}</strong> 
+             has been approved and provisioned.</p>
+          <div style="background:#1e2020;border:1px solid #444748;
+                      border-radius:8px;padding:24px;margin:24px 0">
+            <p style="margin:0 0 8px;color:#8e9192;font-size:12px;
+                      text-transform:uppercase;letter-spacing:0.05em">
+              YOUR LOGIN DETAILS
+            </p>
+            <p style="margin:4px 0">
+              <strong>URL:</strong> 
+              <a href="${data.loginUrl}" style="color:#6fd7d6">
+                ${data.loginUrl}
+              </a>
+            </p>
+            <p style="margin:4px 0">
+              <strong>Email:</strong> ${data.to}
+            </p>
+            <p style="margin:4px 0">
+              <strong>Temporary Password:</strong> 
+              <code style="background:#282a2b;padding:2px 8px;
+                           border-radius:4px">
+                ${data.tempPassword}
+              </code>
+            </p>
+          </div>
+          <p style="color:#fbbc00">
+            ⚠ Please change your password immediately after 
+            your first login.
           </p>
-          <p style="margin:4px 0">
-            <strong>URL:</strong> 
-            <a href="${data.loginUrl}" style="color:#6fd7d6">
-              ${data.loginUrl}
-            </a>
-          </p>
-          <p style="margin:4px 0">
-            <strong>Email:</strong> ${data.to}
-          </p>
-          <p style="margin:4px 0">
-            <strong>Temporary Password:</strong> 
-            <code style="background:#282a2b;padding:2px 8px;
-                         border-radius:4px">
-              ${data.tempPassword}
-            </code>
+          <hr style="border-color:#444748;margin:32px 0"/>
+          <p style="color:#8e9192;font-size:12px">
+            © 2026 Mumo Global Systems
           </p>
         </div>
-        <p style="color:#fbbc00">
-          ⚠ Please change your password immediately after 
-          your first login.
-        </p>
-        <hr style="border-color:#444748;margin:32px 0"/>
-        <p style="color:#8e9192;font-size:12px">
-          © 2026 Mumo Global Systems
-        </p>
-      </div>
-    `,
-  });
+      `,
+    });
+    logger.info({ organizationName: data.organizationName }, 'Application approved email sent');
+  } catch (err) {
+    logger.error({ err, organizationName: data.organizationName }, 'Failed to send application approved email');
+  }
 }
 
 export async function sendApplicationRejected(data: {
@@ -120,41 +129,46 @@ export async function sendApplicationRejected(data: {
   organizationName: string;
   reason: string;
 }) {
-  await transporter.sendMail({
-    from: process.env.SMTP_FROM || 'noreply@mumo.app',
-    to: data.to,
-    subject: 'Mumo POS — Application Update',
-    html: `
-      <div style="font-family:Inter,sans-serif;
-                  background:#121414;color:#e2e2e2;
-                  padding:40px;max-width:600px">
-        <h1 style="color:#ffb4ab;font-size:24px">
-          Application Update
-        </h1>
-        <p>Hi ${data.name},</p>
-        <p>After reviewing your application for 
-           <strong>${data.organizationName}</strong>, 
-           we are unable to proceed at this time.</p>
-        <div style="background:#93000a;border-radius:8px;
-                    padding:16px;margin:24px 0">
-          <p style="margin:0;color:#ffdad6">
-            <strong>Reason:</strong> ${data.reason}
+  try {
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || 'noreply@mumo.app',
+      to: data.to,
+      subject: 'Mumo POS — Application Update',
+      html: `
+        <div style="font-family:Inter,sans-serif;
+                    background:#121414;color:#e2e2e2;
+                    padding:40px;max-width:600px">
+          <h1 style="color:#ffb4ab;font-size:24px">
+            Application Update
+          </h1>
+          <p>Hi ${data.name},</p>
+          <p>After reviewing your application for 
+             <strong>${data.organizationName}</strong>, 
+             we are unable to proceed at this time.</p>
+          <div style="background:#93000a;border-radius:8px;
+                      padding:16px;margin:24px 0">
+            <p style="margin:0;color:#ffdad6">
+              <strong>Reason:</strong> ${data.reason}
+            </p>
+          </div>
+          <p>If you believe this is an error, please contact 
+             us at 
+             <a href="mailto:support@mumo.app" 
+                style="color:#6fd7d6">
+               support@mumo.app
+             </a>
+          </p>
+          <hr style="border-color:#444748;margin:32px 0"/>
+          <p style="color:#8e9192;font-size:12px">
+            © 2026 Mumo Global Systems
           </p>
         </div>
-        <p>If you believe this is an error, please contact 
-           us at 
-           <a href="mailto:support@mumo.app" 
-              style="color:#6fd7d6">
-             support@mumo.app
-           </a>
-        </p>
-        <hr style="border-color:#444748;margin:32px 0"/>
-        <p style="color:#8e9192;font-size:12px">
-          © 2026 Mumo Global Systems
-        </p>
-      </div>
-    `,
-  });
+      `,
+    });
+    logger.info({ organizationName: data.organizationName }, 'Application rejection email sent');
+  } catch (err) {
+    logger.error({ err, organizationName: data.organizationName }, 'Failed to send application rejection email');
+  }
 }
 
 export async function sendSuperAdminNotification(data: {
