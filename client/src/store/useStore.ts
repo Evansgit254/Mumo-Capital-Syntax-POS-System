@@ -23,11 +23,23 @@ interface HardwareSettings {
     theme: 'light' | 'dark';
 }
 
+interface SuperAdminSession {
+    token: string | null;
+    id: string | null;
+    email: string | null;
+    name: string | null;
+}
+
 interface StoreState {
     // Session Slice (memory-only, NOT persisted)
     session: Session;
     setSession: (session: Partial<Session>) => void;
     clearSession: () => void;
+
+    // Super Admin Slice (memory-only)
+    superAdmin: SuperAdminSession;
+    setSuperAdmin: (data: Partial<SuperAdminSession>) => void;
+    clearSuperAdmin: () => void;
 
     // Cart Slice
     cart: {
@@ -69,6 +81,13 @@ const defaultSession: Session = {
     firstName: null,
 };
 
+const defaultSuperAdmin: SuperAdminSession = {
+    token: null,
+    id: null,
+    email: null,
+    name: null,
+};
+
 export const useStore = create<StoreState>()(
     persist(
         (set) => ({
@@ -82,6 +101,15 @@ export const useStore = create<StoreState>()(
                 set({
                     session: { ...defaultSession },
                 }),
+
+            // Super Admin
+            superAdmin: { ...defaultSuperAdmin },
+            setSuperAdmin: (updates) =>
+                set((state) => ({
+                    superAdmin: { ...state.superAdmin, ...updates },
+                })),
+            clearSuperAdmin: () =>
+                set({ superAdmin: { ...defaultSuperAdmin } }),
 
             // Guest
             guest: {

@@ -31,6 +31,10 @@ import GuestFolioPage from './pages/GuestFolioPage';
 import WorkforcePage from './pages/admin/WorkforcePage';
 import ExecutiveAnalyticsPage from './pages/admin/ExecutiveAnalyticsPage';
 import NotFoundPage from './pages/NotFoundPage';
+import RegisterPage from './pages/onboarding/RegisterPage';
+import ApplicationStatusPage from './pages/onboarding/ApplicationStatusPage';
+import SuperAdminLoginPage from './pages/super-admin/SuperAdminLoginPage';
+import SuperAdminApplicationsPage from './pages/super-admin/ApplicationsPage';
 import { Role } from '@mumo/types';
 
 function App() {
@@ -45,6 +49,14 @@ function App() {
 
                 {/* Public Staff Route */}
                 <Route path="/login" element={<LoginPage />} />
+
+                {/* Onboarding Routes (Public, no auth) */}
+                <Route path="/register" element={<RegisterPage />} />
+                <Route path="/register/status/:applicationId" element={<ApplicationStatusPage />} />
+
+                {/* Super Admin Routes (Public login, protected dashboard) */}
+                <Route path="/super-admin/login" element={<SuperAdminLoginPage />} />
+                <Route path="/super-admin/applications" element={<SuperAdminApplicationsPage />} />
 
                 {/* Protected App Shell */}
                 <Route element={<ProtectedRoute />}>

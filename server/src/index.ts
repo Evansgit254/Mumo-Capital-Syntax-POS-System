@@ -31,6 +31,8 @@ import shiftsRoutes from './routes/shifts';
 import clockEventsRoutes from './routes/clock-events';
 import activityBookingsRoutes from './routes/activity-bookings';
 import vendorRoutes from './routes/vendors';
+import onboardingRouter from './routes/onboarding';
+import superAdminAuthRouter from './routes/super-admin-auth';
 
 const app = express();
 app.set("trust proxy", 1);
@@ -68,6 +70,8 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/auth', authRoutes);
+app.use('/api/onboarding', onboardingRouter);
+app.use('/api/super-admin', superAdminAuthRouter);
 
 // ── Public API Routes (require tenant ID but no JWT) ──────────────────────
 app.use('/api/public/reservations', extractTenant, reservationRoutes);

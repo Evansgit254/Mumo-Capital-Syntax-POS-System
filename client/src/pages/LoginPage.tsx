@@ -3,7 +3,8 @@ import { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { authService, getErrorMessage } from '../api/service';
-import { LogIn, Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, CheckCircle2 } from 'lucide-react';
+import FormField from '../components/ui/FormField';
 
 export default function LoginPage() {
     const setSession = useStore((state) => state.setSession);
@@ -41,81 +42,151 @@ export default function LoginPage() {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-surface relative overflow-hidden">
-            {/* Background Decorative Elements */}
-            <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-secondary/10 blur-[120px] rounded-full" />
-            <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-tertiary/10 blur-[120px] rounded-full" />
+        <div className="min-h-screen flex flex-col sm:flex-row bg-surface overflow-hidden">
+            {/* Left Panel - Brand & Proposition (Hidden on Mobile) */}
+            <div className="hidden sm:flex sm:w-[60%] relative flex-col items-center justify-center p-12 overflow-hidden bg-gradient-to-br from-surface to-surface-container-low border-r border-outline-variant/30">
+                {/* Dot Grid Texture */}
+                <div 
+                    className="absolute inset-0 opacity-[0.05]"
+                    style={{
+                        backgroundImage: `radial-gradient(var(--color-secondary) 1px, transparent 1px)`,
+                        backgroundSize: '24px 24px'
+                    }}
+                />
+                
+                {/* Ambient Glow */}
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] bg-secondary/10 blur-[120px] rounded-full pointer-events-none" />
 
-            <div className="w-full max-w-[480px] px-6 relative z-10">
-                {/* Logo & Header */}
-                <div className="mb-12 flex flex-col items-center text-center">
-                    <div className="h-16 w-16 bg-secondary rounded-2xl flex items-center justify-center mb-6 shadow-xl shadow-secondary/20">
-                        <span className="text-3xl font-bold text-white">M</span>
+                <div className="relative z-10 flex flex-col items-center text-center max-w-lg">
+                    {/* Wordmark */}
+                    <div className="mb-8 animate-fade-up" style={{ animationDelay: '100ms' }}>
+                        <h1 className="text-[64px] font-bold tracking-[-0.04em] leading-none text-on-surface">
+                            MUMO<span className="text-secondary">.</span>
+                        </h1>
+                        <p className="mt-4 text-[14px] font-bold tracking-[0.2em] text-secondary/80">
+                            HOSPITALITY. REDEFINED.
+                        </p>
                     </div>
-                    <h1 className="display-lg text-on-surface mb-2">Mumo POS</h1>
-                    <p className="body-lg text-on-surface-variant">The future of hospitality management.</p>
+
+                    {/* Value Propositions */}
+                    <div className="space-y-6 mt-12 text-left">
+                        {[
+                            "Institutional-grade stability and security",
+                            "Real-time guest and inventory intelligence",
+                            "Effortless multi-outlet orchestration"
+                        ].map((bullet, idx) => (
+                            <div 
+                                key={idx}
+                                className="flex items-center gap-4 animate-fade-up"
+                                style={{ animationDelay: `${200 + idx * 100}ms` }}
+                            >
+                                <div className="h-6 w-6 rounded-full bg-secondary/10 flex items-center justify-center shrink-0">
+                                    <CheckCircle2 className="text-secondary" size={14} />
+                                </div>
+                                <span className="body-md text-on-surface-variant font-medium">
+                                    {bullet}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </div>
+
+            {/* Right Panel - Login Form */}
+            <div className="flex-1 sm:w-[40%] bg-surface-container flex flex-col items-center justify-center p-8 sm:p-12 relative">
+                {/* Mobile Top Bar */}
+                <div className="sm:hidden absolute top-12 left-0 right-0 flex flex-col items-center">
+                    <div className="h-10 w-10 rounded-xl bg-secondary flex items-center justify-center mb-4">
+                        <span className="text-xl font-bold text-white">M</span>
+                    </div>
+                    <p className="text-[12px] font-bold tracking-[0.15em] text-secondary/80">HOSPITALITY. REDEFINED.</p>
                 </div>
 
-                {/* Login Card */}
-                <div className="bg-surface-container-high/50 backdrop-blur-xl rounded-3xl border border-outline-variant p-8 shadow-2xl">
-                    {/* Error State */}
-                    {error && (
-                        <div className="mb-8 p-4 bg-error/10 border border-error/20 rounded-xl flex items-start gap-3 animate-in fade-in slide-in-from-top-2">
-                            <AlertCircle className="text-error shrink-0 mt-0.5" size={18} />
-                            <p className="text-sm font-medium text-error leading-snug">{error}</p>
-                        </div>
-                    )}
+                <div className="w-full max-w-[400px] animate-fade-up" style={{ animationDelay: '400ms' }}>
+                    {/* Desktop Logo Mark */}
+                    <div className="hidden sm:flex h-8 w-8 rounded-lg bg-secondary items-center justify-center mb-12">
+                        <span className="text-sm font-bold text-white">M</span>
+                    </div>
+
+                    <div className="mb-10">
+                        <h2 className="headline-md text-on-surface mb-2">Welcome back</h2>
+                        <p className="body-md text-on-surface-variant">Sign in to your workspace</p>
+                    </div>
 
                     <form onSubmit={handleSubmit} className="space-y-6">
-                        <div className="space-y-2">
-                            <label className="label-sm text-on-surface-variant ml-1">Email Address</label>
+                        <FormField 
+                            label="Email Address"
+                            error={error && error.includes('email') ? error : undefined}
+                        >
                             <input
                                 type="email"
                                 required
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 className="input-field"
-                                placeholder="johndoe@mumo.com"
+                                placeholder="name@workspace.com"
                                 autoComplete="username"
                             />
-                        </div>
+                        </FormField>
 
-                        <div className="space-y-2">
-                            <label className="label-sm text-on-surface-variant ml-1">Password</label>
-                            <input
-                                type="password"
-                                required
-                                value={password}
-                                onChange={(e) => setPassword(e.target.value)}
-                                className="input-field"
-                                placeholder="••••••••"
-                                autoComplete="current-password"
-                            />
-                        </div>
+                        <FormField 
+                            label="Password"
+                            error={error && !error.includes('email') ? error : undefined}
+                        >
+                            <div className="relative group">
+                                <input
+                                    type="password"
+                                    required
+                                    value={password}
+                                    onChange={(e) => setPassword(e.target.value)}
+                                    className="input-field pr-12"
+                                    placeholder="••••••••"
+                                    autoComplete="current-password"
+                                />
+                                <button
+                                    type="button"
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-secondary body-md font-semibold hover:opacity-80 transition-opacity"
+                                >
+                                    Forgot?
+                                </button>
+                            </div>
+                        </FormField>
 
-                        <div className="pt-2">
+                        <div className="pt-4">
                             <button
                                 type="submit"
                                 disabled={isSubmitting}
-                                className="btn-primary w-full group relative overflow-hidden"
+                                className="btn-primary w-full group overflow-hidden relative"
                             >
                                 {isSubmitting ? (
                                     <Loader2 className="animate-spin" size={20} />
                                 ) : (
                                     <>
-                                        <span className="relative z-10">Access Dashboard</span>
-                                        <LogIn size={18} className="relative z-10 transition-transform group-hover:translate-x-1" />
+                                        <div className="absolute inset-0 shimmer-effect pointer-events-none" />
+                                        <span className="relative z-10">Sign In</span>
                                     </>
                                 )}
                             </button>
                         </div>
                     </form>
-                </div>
 
-                <p className="mt-8 text-center body-md text-on-surface-variant/40">
-                    &copy; 2026 Mumo Capital & Syntax POS. All rights reserved.
-                </p>
+                    <div className="mt-12 space-y-4 pt-12 border-t border-outline-variant/30">
+                        <p className="body-md text-on-surface-variant/60 text-center">
+                            Don't have an account?{' '}
+                            <span 
+                                className="text-secondary font-semibold cursor-pointer hover:underline underline-offset-4 transition-all"
+                                onClick={() => navigate('/register')}
+                            >
+                                Register your property
+                            </span>
+                        </p>
+                        <p className="text-[11px] text-center tracking-wider text-on-surface-variant/40 uppercase font-bold">
+                            &copy; 2026 MUMO GLOBAL SYSTEMS
+                        </p>
+                    </div>
+                </div>
             </div>
         </div>
     );
 }
+

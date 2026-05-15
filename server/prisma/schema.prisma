@@ -382,3 +382,36 @@ model ClockEvent {
 
   @@index([tenantId])
 }
+
+model TenantApplication {
+  id               String    @id @default(cuid())
+  organizationName String
+  domain           String    @unique
+  adminFirstName   String
+  adminLastName    String
+  adminEmail       String    @unique
+  adminPhone       String?
+  propertyType     String
+  propertySize     String
+  country          String
+  message          String?
+  status           String    @default("PENDING")
+  reviewedBy       String?
+  reviewedAt       DateTime?
+  rejectionReason  String?
+  provisionedAt    DateTime?
+  tenantId         String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([status])
+  @@index([domain])
+}
+
+model SuperAdmin {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  name         String
+  createdAt    DateTime @default(now())
+}

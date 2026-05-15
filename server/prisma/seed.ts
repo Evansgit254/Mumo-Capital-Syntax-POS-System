@@ -488,6 +488,25 @@ async function main() {
     await prisma.clockEvent.createMany({ data: clockData });
     console.log('   Shifts & Clock Events: Created a week of shifts for all users\n');
 
+    // ══════════════════════════════════════════════════════════════════════════════
+    // SUPER ADMIN
+    // ══════════════════════════════════════════════════════════════════════════════
+    const superAdminEmail =
+      process.env.SUPER_ADMIN_EMAIL || 'super@mumo.app';
+    const superAdminPassword =
+      process.env.SUPER_ADMIN_PASSWORD || 'ChangeMe123!';
+
+    await prisma.superAdmin.upsert({
+      where: { email: superAdminEmail },
+      update: {},
+      create: {
+        email: superAdminEmail,
+        passwordHash: await bcrypt.hash(superAdminPassword, SALT_ROUNDS),
+        name: 'Mumo Super Admin',
+      },
+    });
+    console.log(`✅ Super admin seeded: ${superAdminEmail}\n`);
+
     // ── Summary ────────────────────────────────────────────────────────────────
     console.log('═══════════════════════════════════════════════════════');
     console.log('  Seed complete!');
@@ -501,6 +520,8 @@ async function main() {
     console.log('  Tenant 2: Seaside Bistro');
     console.log(`    ID: ${tenant2.id}`);
     console.log('    admin@seaside.com / manager@seaside.com / cashier@seaside.com');
+    console.log('');
+    console.log(`  Super Admin: ${superAdminEmail}`);
     console.log('═══════════════════════════════════════════════════════');
 }
 
