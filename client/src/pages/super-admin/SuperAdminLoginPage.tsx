@@ -119,7 +119,7 @@ export default function SuperAdminLoginPage() {
                                 <button
                                     type="button"
                                     onClick={() => setShowPassword(!showPassword)}
-                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant/70 hover:text-secondary transition-colors focus:outline-none"
+                                    className="absolute right-4 top-1/2 -translate-y-1/2 text-secondary hover:brightness-125 transition-all focus:outline-none"
                                     title={showPassword ? "Hide password" : "Show password"}
                                 >
                                     {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
