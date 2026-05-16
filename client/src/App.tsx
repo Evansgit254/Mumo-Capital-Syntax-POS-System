@@ -31,6 +31,7 @@ import GuestFolioPage from './pages/GuestFolioPage';
 import WorkforcePage from './pages/admin/WorkforcePage';
 import ExecutiveAnalyticsPage from './pages/admin/ExecutiveAnalyticsPage';
 import NotFoundPage from './pages/NotFoundPage';
+import HelpPage from './pages/HelpPage';
 import RegisterPage from './pages/onboarding/RegisterPage';
 import ApplicationStatusPage from './pages/onboarding/ApplicationStatusPage';
 import SuperAdminLoginPage from './pages/super-admin/SuperAdminLoginPage';
@@ -99,6 +100,7 @@ function App() {
 
                         {/* Settings (All authenticated roles) */}
                         <Route path="/settings" element={<SettingsPage />} />
+                        <Route path="/help" element={<HelpPage />} />
 
                         {/* Admin Routes (TENANT_ADMIN only) */}
                         <Route element={<ProtectedRoute allowedRoles={[Role.TENANT_ADMIN]} />}>

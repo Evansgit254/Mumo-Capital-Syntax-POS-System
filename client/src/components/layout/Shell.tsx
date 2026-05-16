@@ -23,7 +23,8 @@ import {
     Truck,
     Users,
     Layout,
-    LayoutPanelLeft
+    LayoutPanelLeft,
+    HelpCircle
 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -46,6 +47,7 @@ const NAV_ITEMS = [
     { name: 'Menu', path: '/menu', icon: UtensilsCrossed, roles: ['TENANT_ADMIN', 'MANAGER'] },
     { name: 'Reports', path: '/reports', icon: BarChart3 },
     { name: 'Settings', path: '/settings', icon: Settings },
+    { name: 'Help', path: '/help', icon: HelpCircle },
     { name: 'Permissions', path: '/admin/permissions', icon: Shield, roles: ['TENANT_ADMIN'], separator: true },
     { name: 'Tenant', path: '/admin/tenant', icon: Building2, roles: ['TENANT_ADMIN'] },
     { name: 'Floor Plan', path: '/admin/tables', icon: Layout, roles: ['TENANT_ADMIN'] },

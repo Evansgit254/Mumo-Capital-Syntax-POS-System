@@ -2,9 +2,11 @@
 
 ![Mumo Dashboard](./docs/screenshots/dashboard.png)
 
-**Status:** `🚀 Production Ready` | **Version:** `1.1.0-gold`
+**Status:** `🧪 UAT Release` | **Version:** `1.1.0-gold`
 
 A premium, multi-tenant hospitality management system designed for high-end resorts, restaurants, and hotels. Built with a focus on aesthetic excellence, performance, and strict data isolation.
+
+> **📋 UAT Testers:** See `Mumo_POS_UAT_Manual.docx` in the root directory, or use the in-app **Help & Quick Start** page (sidebar → Help) for guided walkthroughs and a feedback link.
 
 ## 🚀 Key Features
 
