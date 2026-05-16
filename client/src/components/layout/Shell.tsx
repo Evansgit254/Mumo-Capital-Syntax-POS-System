@@ -173,18 +173,18 @@ export default function Shell() {
             </aside>
 
             {/* Mobile Bottom Nav */}
-            <aside className="tablet:hidden fixed bottom-0 left-0 right-0 h-[64px] bg-surface-container border-t border-outline-variant flex items-center justify-around z-50 px-2">
-                {NAV_ITEMS.slice(0, 5).map((item) => (
+            <aside className="tablet:hidden fixed bottom-10 left-4 right-4 h-[64px] bg-surface-container/80 backdrop-blur-xl border border-outline-variant/30 rounded-2xl flex items-center justify-around z-50 px-2 shadow-2xl">
+                {NAV_ITEMS.filter(item => !item.roles || item.roles.includes(session.role as string)).slice(0, 5).map((item) => (
                     <NavLink
                         key={item.path}
                         to={item.path}
                         className={({ isActive }) => cn(
-                            "flex flex-col items-center justify-center gap-1 min-w-[64px] transition-colors",
-                            isActive ? "text-secondary" : "text-on-surface-variant"
+                            "flex flex-col items-center justify-center gap-1 min-w-[56px] transition-all",
+                            isActive ? "text-secondary scale-110" : "text-on-surface-variant hover:text-on-surface"
                         )}
                     >
-                        <item.icon size={20} />
-                        <span className="text-[10px] font-bold uppercase tracking-tighter">{item.name}</span>
+                        <item.icon size={20} className={cn("transition-transform")} />
+                        <span className="text-[10px] font-black uppercase tracking-tighter">{item.name}</span>
                     </NavLink>
                 ))}
             </aside>
@@ -199,7 +199,7 @@ export default function Shell() {
                     </button>
                 </header>
 
-                <div className="flex-1 overflow-y-auto pb-[80px] tablet:pb-0">
+                <div className="flex-1 overflow-y-auto pb-20 tablet:pb-0">
                     <Outlet />
                 </div>
             </main>

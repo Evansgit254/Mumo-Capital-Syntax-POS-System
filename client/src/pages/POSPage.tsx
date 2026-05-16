@@ -72,6 +72,12 @@ export default function POSPage() {
         queryKey: ['tables'],
         queryFn: tableService.getAll,
     });
+
+    const tableQuery = useQuery({
+        queryKey: ['table', cart.tableId],
+        queryFn: () => cart.tableId ? tableService.getOne(cart.tableId) : null,
+        enabled: !!cart.tableId
+    });
     
     const settingsQuery = useQuery({
         queryKey: ['tenant-settings'],
@@ -87,7 +93,7 @@ export default function POSPage() {
         return matchesCategory && matchesSearch && item.isAvailable;
     });
 
-    const activeTable = tablesQuery.data?.find(t => t.id === cart.tableId);
+    const activeTable = tableQuery.data || tablesQuery.data?.find(t => t.id === cart.tableId);
 
     const totalAmount = cart.items.reduce((sum, item) => sum + item.subtotal, 0);
 
@@ -198,44 +204,44 @@ export default function POSPage() {
             <div className="flex-1 flex flex-col min-w-0 border-r border-outline-variant">
                 {/* Header */}
                 <header className={cn(
-                    "h-[80px] px-8 flex items-center justify-between bg-surface-container-low shrink-0",
+                    "h-[80px] px-4 tablet:px-8 flex items-center justify-between bg-surface-container-low shrink-0",
                     showOfflineBanner && "mt-[44px]"
                 )}>
-                    <div className="flex items-center gap-6">
+                    <div className="flex items-center gap-4 tablet:gap-6">
                         <button 
                             onClick={() => navigate('/tables')}
-                            className="h-12 w-12 rounded-xl bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors"
+                            className="h-10 w-10 tablet:h-12 tablet:w-12 rounded-xl bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors"
                         >
                             <ChevronLeft size={24} />
                         </button>
                         <div className="flex flex-col">
-                            <h1 className="headline-md font-bold text-on-surface">
-                                Table {activeTable?.number || 'POS'}
+                            <h1 className="text-lg tablet:headline-md font-bold text-on-surface leading-tight">
+                                {(activeTable as any)?.name || (activeTable?.number ? `Table ${activeTable.number}` : 'POS')}
                             </h1>
-                            <p className="label-sm text-on-surface-variant uppercase tracking-widest">
-                                {settingsQuery.data?.currency || 'KES'} • {activeTable ? `Table ${activeTable.number}` : (cart.items.length > 0 ? 'Direct Order' : 'Select Items')}
+                            <p className="text-[10px] tablet:label-sm text-on-surface-variant uppercase tracking-widest mt-0.5">
+                                {settingsQuery.data?.currency || 'KES'} • {activeTable ? ((activeTable as any).name || `Table ${activeTable.number}`) : (cart.items.length > 0 ? 'Direct Order' : 'Mumo POS')}
                             </p>
                         </div>
                     </div>
 
-                    <div className="relative w-[300px]">
-                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/40" size={18} />
+                    <div className="relative w-[150px] tablet:w-[300px]">
+                        <Search className="absolute left-3 tablet:left-4 top-1/2 -translate-y-1/2 text-on-surface-variant/40" size={16} />
                         <input 
                             type="text" 
-                            placeholder="Search items..."
+                            placeholder="Search..."
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full h-11 pl-12 pr-4 rounded-full bg-surface-container-highest border-none text-on-surface placeholder:text-on-surface-variant/30 focus:ring-2 focus:ring-secondary/50 transition-all text-sm"
+                            className="w-full h-9 tablet:h-11 pl-10 tablet:pl-12 pr-4 rounded-full bg-surface-container-highest border-none text-on-surface placeholder:text-on-surface-variant/30 focus:ring-2 focus:ring-secondary/50 transition-all text-xs tablet:text-sm"
                         />
                     </div>
                 </header>
 
                 {/* Categories Bar */}
-                <div className="h-[64px] px-8 flex items-center gap-3 bg-surface shrink-0 overflow-x-auto no-scrollbar border-b border-outline-variant/30">
+                <div className="h-[64px] px-4 tablet:px-8 flex items-center gap-2 bg-surface shrink-0 overflow-x-auto no-scrollbar border-b border-outline-variant/30 scroll-smooth">
                     <button 
                         onClick={() => setActiveCategory(null)}
                         className={cn(
-                            "h-9 px-6 rounded-full label-sm transition-all whitespace-nowrap",
+                            "flex-shrink-0 h-9 px-5 rounded-full label-xs tablet:label-sm transition-all whitespace-nowrap",
                             !activeCategory ? "bg-secondary text-white" : "bg-surface-container-highest text-on-surface-variant hover:bg-surface-container-highest/80"
                         )}
                     >
@@ -246,7 +252,7 @@ export default function POSPage() {
                             key={cat}
                             onClick={() => setActiveCategory(cat)}
                             className={cn(
-                                "h-9 px-6 rounded-full label-sm transition-all whitespace-nowrap capitalize",
+                                "flex-shrink-0 h-9 px-5 rounded-full label-xs tablet:label-sm transition-all whitespace-nowrap capitalize",
                                 activeCategory === cat ? "bg-secondary text-white" : "bg-surface-container-highest text-on-surface-variant hover:bg-surface-container-highest/80"
                             )}
                         >

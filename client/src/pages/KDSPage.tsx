@@ -69,25 +69,25 @@ export default function KDSPage() {
     }
 
     return (
-        <div className="p-6 tablet:p-10 space-y-8 bg-surface min-h-full" onClick={() => setOpenMenuId(null)}>
+        <div className="p-6 tablet:p-10 space-y-8 bg-surface min-h-full overflow-hidden" onClick={() => setOpenMenuId(null)}>
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
                 <div>
-                    <h1 className="display-lg text-on-surface">Kitchen Display</h1>
-                    <p className="body-lg text-on-surface-variant">Active orders and preparation priority.</p>
+                    <h1 className="text-2xl tablet:display-lg text-on-surface">Kitchen Display</h1>
+                    <p className="body-md tablet:body-lg text-on-surface-variant">Active orders and preparation priority.</p>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex flex-row flex-wrap items-center gap-3 w-full md:w-auto">
                     <button 
                         onClick={() => kdsQuery.refetch()}
                         disabled={kdsQuery.isFetching}
-                        className="h-11 px-6 rounded-xl bg-surface-container-high text-on-surface label-md flex items-center gap-2 hover:bg-surface-container-highest transition-all disabled:opacity-50"
+                        className="flex-1 md:flex-none h-11 px-6 rounded-xl bg-surface-container-high text-on-surface label-md flex items-center justify-center gap-2 hover:bg-surface-container-highest transition-all disabled:opacity-50"
                     >
                         <RefreshCw size={18} className={kdsQuery.isFetching ? 'animate-spin' : ''} />
                         <span>Refresh</span>
                     </button>
-                    <div className="pill-status bg-secondary/10 text-secondary border border-secondary/20">
-                        <LayoutGrid size={14} />
-                        <span>GRID VIEW</span>
+                    <div className="flex-1 md:flex-none h-11 px-4 rounded-xl bg-secondary/10 text-secondary border border-secondary/20 flex items-center justify-center gap-2 max-w-full">
+                        <LayoutGrid size={14} className="shrink-0" />
+                        <span className="truncate text-[10px] font-bold uppercase tracking-wider">GRID VIEW</span>
                     </div>
                 </div>
             </div>

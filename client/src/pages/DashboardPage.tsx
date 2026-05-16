@@ -59,6 +59,7 @@ export default function DashboardPage() {
     const staffQuery = useQuery({
         queryKey: ['users'],
         queryFn: userService.getAll,
+        enabled: session.role === 'TENANT_ADMIN' || session.role === 'MANAGER',
     });
 
     const isLoading = ordersQuery.isLoading || tablesQuery.isLoading || reservationsQuery.isLoading || inventoryAlertsQuery.isLoading || staffQuery.isLoading;
