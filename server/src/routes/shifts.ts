@@ -29,7 +29,7 @@ const updateShiftSchema = z.object({
 router.use(authenticate);
 
 // Get shifts (with optional date range filters)
-router.get('/', requireRole(Role.TENANT_ADMIN, Role.MANAGER), async (req, res) => {
+router.get('/', requireRole(Role.TENANT_ADMIN, Role.MANAGER, Role.STAFF), async (req, res) => {
     try {
         const tenantId = req.user!.tenantId;
         const { start, end } = req.query; // YYYY-MM-DD strings
@@ -77,7 +77,7 @@ router.get('/', requireRole(Role.TENANT_ADMIN, Role.MANAGER), async (req, res) =
 });
 
 // Create a shift
-router.post('/', requireRole(Role.TENANT_ADMIN, Role.MANAGER), async (req, res) => {
+router.post('/', requireRole(Role.TENANT_ADMIN, Role.MANAGER, Role.STAFF), async (req, res) => {
     try {
         const tenantId = req.user!.tenantId;
         const data = createShiftSchema.parse(req.body);

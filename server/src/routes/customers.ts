@@ -82,7 +82,7 @@ router.post(
 // ── PUT /api/customers/:id ──────────────────────────────────────────────────
 router.put(
     '/:id',
-    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
+    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER, Role.STAFF),
     validate(updateCustomerSchema),
     async (req: Request, res: Response, next: NextFunction) => {
         try {

@@ -12,7 +12,7 @@ const router = Router();
 // ── GET /api/payments ────────────────────────────────────────────────────────
 router.get(
     '/',
-    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
+    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER, Role.STAFF),
     async (req: Request, res: Response, next: NextFunction) => {
         try {
             const { tenantId } = req.user!;
@@ -99,7 +99,7 @@ router.post(
 // ── GET /api/payments/:id ────────────────────────────────────────────────────
 router.get(
     '/:id',
-    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
+    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER, Role.STAFF),
     async (req: Request, res: Response, next: NextFunction) => {
         try {
             const { tenantId } = req.user!;
