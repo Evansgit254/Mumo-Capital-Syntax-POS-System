@@ -3,7 +3,7 @@ import { useState, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { authService, getErrorMessage } from '../api/service';
-import { Loader2, CheckCircle2, Eye, EyeOff } from 'lucide-react';
+import { Loader2, CheckCircle2, Eye, EyeOff, FileText } from 'lucide-react';
 import FormField from '../components/ui/FormField';
 
 export default function LoginPage() {
@@ -192,6 +192,16 @@ export default function LoginPage() {
                                 Register your property
                             </span>
                         </p>
+                        <div className="flex justify-center">
+                            <a 
+                                href="/Mumo_POS_UAT_Manual.docx" 
+                                download 
+                                className="flex items-center gap-2 text-[12px] font-bold text-secondary bg-secondary/5 px-4 py-2 rounded-full hover:bg-secondary/10 transition-all border border-secondary/10"
+                            >
+                                <FileText size={14} />
+                                UAT TESTER? DOWNLOAD MANUAL
+                            </a>
+                        </div>
                         <p className="text-[11px] text-center tracking-wider text-on-surface-variant/40 uppercase font-bold">
                             &copy; 2026 MUMO GLOBAL SYSTEMS
                         </p>

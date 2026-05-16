@@ -22,6 +22,7 @@ import {
     ArrowRight,
     Sparkles,
     Info,
+    FileText,
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -164,16 +165,26 @@ export default function HelpPage() {
                         Your feedback is critical in shaping the final product. Please test all workflows thoroughly 
                         and report any issues using the feedback button below.
                     </p>
-                    <a
-                        href="https://forms.google.com"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-2 mt-2 px-4 py-2.5 bg-secondary text-white rounded-lg font-semibold text-sm hover:brightness-110 transition-all"
-                    >
-                        <MessageSquarePlus size={16} />
-                        Submit UAT Feedback
-                        <ExternalLink size={14} className="opacity-60" />
-                    </a>
+                    <div className="flex flex-wrap gap-3 mt-2">
+                        <a
+                            href="https://forms.google.com"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-2 px-4 py-2.5 bg-secondary text-white rounded-lg font-semibold text-sm hover:brightness-110 transition-all"
+                        >
+                            <MessageSquarePlus size={16} />
+                            Submit UAT Feedback
+                            <ExternalLink size={14} className="opacity-60" />
+                        </a>
+                        <a
+                            href="/Mumo_POS_UAT_Manual.docx"
+                            download
+                            className="inline-flex items-center gap-2 px-4 py-2.5 bg-surface-container-highest text-on-surface rounded-lg font-semibold text-sm hover:bg-white/10 transition-all border border-outline-variant/30"
+                        >
+                            <FileText size={16} />
+                            Download Manual
+                        </a>
+                    </div>
                 </div>
             </div>
 
