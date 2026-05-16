@@ -94,9 +94,9 @@ export default function LoginPage() {
             </div>
 
             {/* Right Panel - Login Form */}
-            <div className="flex-1 sm:w-[40%] bg-surface-container flex flex-col items-center justify-center p-8 sm:p-12 relative">
+            <div className="flex-1 sm:w-[40%] bg-surface-container flex flex-col items-center pt-16 pb-8 sm:pt-0 sm:justify-center p-8 sm:p-12 relative">
                 {/* Mobile Top Bar */}
-                <div className="sm:hidden absolute top-12 left-0 right-0 flex flex-col items-center">
+                <div className="sm:hidden flex flex-col items-center mb-10">
                     <div className="h-10 w-10 rounded-xl bg-secondary flex items-center justify-center mb-4">
                         <span className="text-xl font-bold text-white">M</span>
                     </div>
