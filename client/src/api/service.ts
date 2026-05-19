@@ -213,7 +213,7 @@ export const orderService = {
     getAll: (params?: PaginationParams) => api.get<PaginatedResponse<Order>>('/api/orders', { params }).then(r => r.data),
     getLive: () => api.get<Order[]>('/api/orders/live').then(r => r.data),
     getOne: (id: string) => api.get<Order>(`/api/orders/${id}`).then(r => r.data),
-    create: (data: { tableId?: string; items: { menuItemId: string; quantity: number }[] }) => 
+    create: (data: { tableId?: string; items: { menuItemId: string; quantity: number; notes?: string | null; modifiers?: string[] }[] }) => 
         api.post<Order>('/api/orders', data).then(r => r.data),
     updateStatus: (id: string, status: OrderStatus) => 
         api.put<Order>(`/api/orders/${id}/status`, { status }).then(r => r.data),

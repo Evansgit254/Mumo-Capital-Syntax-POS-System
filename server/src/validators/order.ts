@@ -9,6 +9,8 @@ const orderItemSchema = z.object({
         .number({ required_error: 'Quantity is required' })
         .int('Quantity must be an integer')
         .positive('Quantity must be at least 1'),
+    notes: z.string().max(200, 'Notes must be 200 characters or fewer').nullish(),
+    modifiers: z.array(z.string()).optional(),
 });
 
 export const createOrderSchema = z.object({

@@ -270,7 +270,7 @@ router.post(
 
                 const previousStock = item.currentStock;
 
-                if (adjustmentType === AdjustmentType.WASTE || adjustmentType === AdjustmentType.TRANSFER) {
+                if (adjustmentType === AdjustmentType.WASTE) {
                     // For reductions, verify sufficient stock inside the transaction
                     if (item.currentStock.lessThan(quantityDecimal)) {
                         throw badRequest(
