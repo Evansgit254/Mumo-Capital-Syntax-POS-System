@@ -19,10 +19,12 @@ export default function GuestDirectoryPage() {
     const [statusFilter, setStatusFilter] = useState('CHECKED_IN');
 
     // Fetch guests
-    const { data: guests = [], isLoading } = useQuery({
+    const { data: paginatedGuests, isLoading } = useQuery({
         queryKey: ['checked-in-guests', statusFilter],
         queryFn: () => guestFolioService.getCheckedInGuests({ status: statusFilter }),
     });
+
+    const guests = paginatedGuests?.data || [];
 
     const filteredGuests = guests.filter(guest => {
         if (searchTerm && !guest.guestName?.toLowerCase().includes(searchTerm.toLowerCase())) return false;

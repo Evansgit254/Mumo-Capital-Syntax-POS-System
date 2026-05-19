@@ -335,13 +335,13 @@ export interface FolioData {
 export const guestFolioService = {
     getFolioCharges: async (roomId: string): Promise<FolioData> => {
         const [ordersRes, paymentsRes] = await Promise.all([
-            api.get<Order[]>('/api/orders', { params: { roomId } }),
-            api.get<Payment[]>('/api/payments', { params: { roomId } })
+            api.get<PaginatedResponse<Order>>('/api/orders', { params: { roomId } }),
+            api.get<PaginatedResponse<Payment>>('/api/payments', { params: { roomId } })
         ]);
-        return { orders: ordersRes.data, payments: paymentsRes.data };
+        return { orders: ordersRes.data.data, payments: paymentsRes.data.data };
     },
     getCheckedInGuests: (filters?: ReservationFilters) => 
-        api.get<Reservation[]>('/api/reservations', { params: { status: 'checked-in', ...filters } }).then(r => r.data),
+        api.get<PaginatedResponse<Reservation>>('/api/reservations', { params: { status: 'checked-in', ...filters } }).then(r => r.data),
     getGuestById: (reservationId: string) => 
         api.get<Reservation>(`/api/reservations/${reservationId}`).then(r => r.data),
     checkoutFolio: (roomId: string, payload: FolioCheckoutPayload) => 
