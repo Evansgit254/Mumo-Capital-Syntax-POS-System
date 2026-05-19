@@ -9,6 +9,9 @@ import { AppError } from '../lib/errors';
 
 const router = Router();
 
+// FIX 6 — CODEX-CRIT-006 / CODEX-WARN-005: Timing attack prevention
+const DUMMY_HASH = '$2b$12$LJ3m4ys3Lzwpzen.Dv0eOe1JEaVPq3B3qUBfVVqFmxJ1kGpQvS6.e';
+
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,
@@ -16,7 +19,7 @@ const loginLimiter = rateLimit({
 });
 
 const loginSchema = z.object({
-  email: z.string().email(),
+  email: z.string().email().toLowerCase().trim(),
   password: z.string().min(1),
 });
 
@@ -30,13 +33,12 @@ router.post(
       const superAdmin = await prisma.superAdmin.findUnique({
         where: { email },
       });
-      if (!superAdmin) {
-        throw new AppError('Invalid credentials', 401);
-      }
-      const valid = await bcrypt.compare(
-        password, superAdmin.passwordHash
-      );
-      if (!valid) {
+
+      // FIX 6: Always compare — even if superAdmin not found
+      const passwordToCompare = superAdmin?.passwordHash ?? DUMMY_HASH;
+      const valid = await bcrypt.compare(password, passwordToCompare);
+
+      if (!superAdmin || !valid) {
         throw new AppError('Invalid credentials', 401);
       }
 
@@ -49,7 +51,7 @@ router.post(
         { id: superAdmin.id, email: superAdmin.email,
           role: 'SUPER_ADMIN' },
         secret,
-        { expiresIn: '8h' }
+        { algorithm: 'HS256', expiresIn: '8h' }
       );
 
       res.json({

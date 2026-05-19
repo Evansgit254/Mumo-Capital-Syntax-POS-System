@@ -19,14 +19,49 @@ const router = Router();
 router.get(
     '/',
     requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
+    // FIX 4 — CODEX-WARN-012: Paginated list endpoint
     async (req: Request, res: Response, next: NextFunction) => {
         try {
             const { tenantId } = req.user!;
-            const vendors = await prisma.vendor.findMany({
-                where: { tenantId },
-                orderBy: { name: 'asc' },
+            const page = Math.max(1, Number(req.query.page) || 1);
+            const limit = Math.min(100, Number(req.query.limit) || 50);
+            const skip = (page - 1) * limit;
+
+            const [vendors, total] = await Promise.all([
+                prisma.vendor.findMany({
+                    where: { tenantId },
+                    orderBy: { name: 'asc' },
+                    skip,
+                    take: limit,
+                }),
+                prisma.vendor.count({ where: { tenantId } }),
+            ]);
+
+            res.json({
+                data: vendors,
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
             });
-            res.json(vendors);
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+// FIX 7 — CODEX-WARN-010: Missing GET /api/vendors/:id
+router.get(
+    '/:id',
+    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
+    async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const { tenantId } = req.user!;
+            const vendor = await prisma.vendor.findFirst({
+                where: { id: req.params.id, tenantId },
+            });
+            if (!vendor) throw notFound('Vendor not found');
+            res.json(vendor);
         } catch (err) {
             next(err);
         }
@@ -40,8 +75,16 @@ router.post(
     async (req: Request, res: Response, next: NextFunction) => {
         try {
             const { tenantId } = req.user!;
+            // FIX 3 — CODEX-WARN-004: Explicit field mapping (no mass assignment)
             const vendor = await prisma.vendor.create({
-                data: { ...req.body, tenantId },
+                data: {
+                    tenantId,
+                    name: req.body.name,
+                    contactName: req.body.contactName,
+                    email: req.body.email,
+                    phone: req.body.phone,
+                    categories: req.body.categories ?? [],
+                },
             });
             res.status(201).json(vendor);
         } catch (err) {
@@ -62,9 +105,16 @@ router.put(
             });
             if (!existing) throw notFound('Vendor not found');
 
+            // FIX 3 — CODEX-WARN-004: Explicit field mapping (no mass assignment)
             const updated = await prisma.vendor.update({
                 where: { id: req.params.id },
-                data: req.body,
+                data: {
+                    name: req.body.name,
+                    contactName: req.body.contactName,
+                    email: req.body.email,
+                    phone: req.body.phone,
+                    categories: req.body.categories,
+                },
             });
             res.json(updated);
         } catch (err) {
@@ -97,17 +147,27 @@ router.delete(
 router.get(
     '/orders',
     requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
+    // FIX 4 — CODEX-WARN-012: Paginated list endpoint
     async (req: Request, res: Response, next: NextFunction) => {
         try {
             const { tenantId } = req.user!;
-            const orders = await prisma.purchaseOrder.findMany({
-                where: { tenantId },
-                include: { 
-                    vendor: { select: { name: true } },
-                    items: { include: { inventoryItem: { select: { name: true, unit: true } } } }
-                },
-                orderBy: { createdAt: 'desc' },
-            });
+            const page = Math.max(1, Number(req.query.page) || 1);
+            const limit = Math.min(100, Number(req.query.limit) || 50);
+            const skip = (page - 1) * limit;
+
+            const [orders, total] = await Promise.all([
+                prisma.purchaseOrder.findMany({
+                    where: { tenantId },
+                    include: { 
+                        vendor: { select: { name: true } },
+                        items: { include: { inventoryItem: { select: { name: true, unit: true } } } }
+                    },
+                    orderBy: { createdAt: 'desc' },
+                    skip,
+                    take: limit,
+                }),
+                prisma.purchaseOrder.count({ where: { tenantId } }),
+            ]);
             
             // Map Decimal to number for response
             const serializedOrders = orders.map(order => ({
@@ -121,7 +181,13 @@ router.get(
                 }))
             }));
             
-            res.json(serializedOrders);
+            res.json({
+                data: serializedOrders,
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+            });
         } catch (err) {
             next(err);
         }

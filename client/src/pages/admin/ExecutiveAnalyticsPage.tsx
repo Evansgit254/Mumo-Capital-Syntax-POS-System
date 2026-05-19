@@ -90,10 +90,10 @@ const RevenuePanel: React.FC<PanelProps> = ({ dateRange }) => {
     const queryClient = useQueryClient();
     const { data: payments, isLoading, error, refetch } = useQuery({
         queryKey: ['executive-revenue', dateRange],
-        queryFn: paymentService.getAll // Ideally we'd pass filters to API, but using client aggregation as requested
+        queryFn: () => paymentService.getAll() // Ideally we'd pass filters to API, but using client aggregation as requested
     });
 
-    const stats = useMemo(() => payments ? deriveRevenue(payments, dateRange) : null, [payments, dateRange]);
+    const stats = useMemo(() => payments?.data ? deriveRevenue(payments.data, dateRange) : null, [payments, dateRange]);
 
     if (isLoading) return <Skeleton className="h-[400px] w-full rounded-3xl" />;
     if (error) return (
@@ -155,7 +155,7 @@ const OccupancyPanel: React.FC<PanelProps> = ({ dateRange }) => {
     const { data: orders, isLoading: ordersLoading } = useQuery({ queryKey: ['executive-orders', dateRange], queryFn: () => orderService.getAll() });
     const { data: tables, isLoading: tablesLoading } = useQuery({ queryKey: ['executive-tables'], queryFn: () => tableService.getAll() });
 
-    const stats = useMemo(() => (orders && tables) ? deriveOccupancy(orders, tables, dateRange) : null, [orders, tables, dateRange]);
+    const stats = useMemo(() => (orders?.data && tables?.data) ? deriveOccupancy(orders.data, tables.data, dateRange) : null, [orders, tables, dateRange]);
 
     if (ordersLoading || tablesLoading) return <Skeleton className="h-[300px] w-full rounded-3xl" />;
 
@@ -183,7 +183,7 @@ const OccupancyPanel: React.FC<PanelProps> = ({ dateRange }) => {
 
 const MenuPanel: React.FC<PanelProps> = ({ dateRange }) => {
     const { data: orders, isLoading } = useQuery({ queryKey: ['executive-orders-menu', dateRange], queryFn: () => orderService.getAll() });
-    const stats = useMemo(() => orders ? deriveMenuPerformance(orders, dateRange) : null, [orders, dateRange]);
+    const stats = useMemo(() => orders?.data ? deriveMenuPerformance(orders.data, dateRange) : null, [orders, dateRange]);
 
     if (isLoading) return <Skeleton className="h-[400px] w-full rounded-3xl" />;
 
@@ -229,7 +229,7 @@ const LaborPanel: React.FC<PanelProps> = ({ dateRange }) => {
     const { data: shifts, isLoading: sLoading } = useQuery({ queryKey: ['executive-shifts', dateRange], queryFn: () => shiftService.getAll() });
     const { data: users, isLoading: uLoading } = useQuery({ queryKey: ['executive-users'], queryFn: () => userService.getAll() });
 
-    const stats = useMemo(() => (shifts && users) ? deriveLaborCost(shifts, users, dateRange) : null, [shifts, users, dateRange]);
+    const stats = useMemo(() => (shifts && users?.data) ? deriveLaborCost(shifts, users.data, dateRange) : null, [shifts, users, dateRange]);
 
     if (sLoading || uLoading) return <Skeleton className="h-[250px] w-full rounded-3xl" />;
 
@@ -260,7 +260,7 @@ const LaborPanel: React.FC<PanelProps> = ({ dateRange }) => {
 
 const InventoryPanel: React.FC<PanelProps> = ({ dateRange }) => {
     const { data: inventory, isLoading } = useQuery({ queryKey: ['executive-inventory'], queryFn: () => inventoryService.getAll() });
-    const stats = useMemo(() => inventory ? deriveInventoryStats(inventory) : null, [inventory]);
+    const stats = useMemo(() => inventory?.data ? deriveInventoryStats(inventory.data) : null, [inventory]);
 
     if (isLoading) return <Skeleton className="h-[250px] w-full rounded-3xl" />;
 
@@ -302,12 +302,17 @@ export default function ExecutiveAnalyticsPage() {
     const queryClient = useQueryClient();
 
     const handleExport = () => {
-        // Collect current data for export
-        const payments = queryClient.getQueryData(['executive-revenue', dateRange]) as any[] || [];
-        const orders = queryClient.getQueryData(['executive-orders', dateRange]) as any[] || [];
-        const shifts = queryClient.getQueryData(['executive-shifts', dateRange]) as any[] || [];
-        const users = queryClient.getQueryData(['executive-users']) as any[] || [];
-        const inventory = queryClient.getQueryData(['executive-inventory']) as any[] || [];
+        // Collect current data for export — unwrap paginated envelopes
+        const paymentsCache = queryClient.getQueryData(['executive-revenue', dateRange]) as any;
+        const ordersCache = queryClient.getQueryData(['executive-orders', dateRange]) as any;
+        const shiftsCache = queryClient.getQueryData(['executive-shifts', dateRange]) as any[] || [];
+        const usersCache = queryClient.getQueryData(['executive-users']) as any;
+        const inventoryCache = queryClient.getQueryData(['executive-inventory']) as any;
+
+        const payments = paymentsCache?.data || [];
+        const orders = ordersCache?.data || [];
+        const shifts = shiftsCache || [];
+        const users = usersCache?.data || [];
 
         const revData = deriveRevenue(payments, dateRange);
         const occData = deriveOccupancy(orders, [], dateRange);

@@ -36,12 +36,12 @@ export default function TableManagementPage() {
 
     const tablesQuery = useQuery({
         queryKey: ['tables'],
-        queryFn: tableService.getAll,
+        queryFn: () => tableService.getAll(),
     });
 
     useEffect(() => {
-        if (tablesQuery.data) {
-            setLocalTables(tablesQuery.data);
+        if (tablesQuery.data?.data) {
+            setLocalTables(tablesQuery.data.data);
         }
     }, [tablesQuery.data]);
 

@@ -53,7 +53,7 @@ router.post('/', requestWriteLimiter, async (req: Request, res: Response) => {
 });
 
 // ── PUBLIC: Check status by ID (guest-facing) ───────────────────────────────
-// FIX 6 — Only returns status field, never full request data
+// FIX 3 — CODEX-CRIT-003: Scope by tenantId to prevent IDOR
 router.get('/:id/status', requestReadLimiter, async (req: Request, res: Response) => {
     try {
         const tenantId = req.headers['x-tenant-id'] as string;
@@ -61,9 +61,9 @@ router.get('/:id/status', requestReadLimiter, async (req: Request, res: Response
             return res.status(400).json({ error: 'Tenant ID is required' });
         }
 
-        const request = await prisma.serviceRequest.findUnique({
-            where: { id: req.params.id },
-            select: { id: true, status: true, createdAt: true }
+        const request = await prisma.serviceRequest.findFirst({
+            where: { id: req.params.id, tenantId },
+            select: { status: true, category: true, createdAt: true }
         });
 
         if (!request) {

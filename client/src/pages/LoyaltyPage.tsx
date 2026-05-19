@@ -36,11 +36,11 @@ const LoyaltyPage: React.FC = () => {
     });
 
     const stats = useMemo(() => {
-        if (!customers) return { total: 0, premium: 0, points: 0 };
+        if (!customers?.data) return { total: 0, premium: 0, points: 0 };
         return {
-            total: customers.length,
-            premium: customers.filter((c: LooseValue) => c.loyaltyPoints > 500).length,
-            points: customers.reduce((sum: number, c: LooseValue) => sum + c.loyaltyPoints, 0),
+            total: customers.data.length,
+            premium: customers.data.filter((c: LooseValue) => c.loyaltyPoints > 500).length,
+            points: customers.data.reduce((sum: number, c: LooseValue) => sum + c.loyaltyPoints, 0),
         };
     }, [customers]);
 
@@ -143,7 +143,7 @@ const LoyaltyPage: React.FC = () => {
 
                     <div className="card-default overflow-hidden">
                         <div className="divide-y divide-outline-variant bg-surface-container-lowest">
-                            {customers?.map((customer: LooseValue) => (
+                            {customers?.data?.map((customer: LooseValue) => (
                                 <div key={customer.id} className="p-6 hover:bg-surface-container-low/50 transition-all group flex flex-col md:flex-row md:items-center justify-between gap-6 cursor-pointer">
                                     <div className="flex items-center gap-5">
                                         <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary/10 to-secondary/10 flex items-center justify-center text-xl font-bold text-on-surface border border-outline-variant">

@@ -109,10 +109,15 @@ export function useOfflineOrders(): UseOfflineOrdersReturn {
     }
   }, [navigate]);
 
+  // FIX 1 — CODEX-WARN-018: Visibility-aware retry
   // Start / stop the 30 s retry timer based on banner visibility
   useEffect(() => {
     if (showOfflineBanner && !retryTimerRef.current) {
-      retryTimerRef.current = setInterval(retryAllPending, RETRY_INTERVAL_MS);
+      retryTimerRef.current = setInterval(() => {
+        // Skip retry when tab is hidden
+        if (document.visibilityState === 'hidden') return;
+        retryAllPending();
+      }, RETRY_INTERVAL_MS);
     }
     return () => {
       if (retryTimerRef.current) {

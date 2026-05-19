@@ -31,9 +31,10 @@ export const errorHandler = (
     if (err.constructor?.name === 'PrismaClientKnownRequestError') {
         const prismaErr = err as any;
         if (prismaErr.code === 'P2002') {
-            return res.status(409).json({
-                error: `Unique constraint violation on: ${prismaErr.meta?.target?.join(', ') || 'unknown field'}`,
-            });
+            const message = isDev
+                ? `Unique constraint violation on: ${prismaErr.meta?.target?.join(', ') || 'unknown field'}`
+                : 'A record with this value already exists';
+            return res.status(409).json({ error: message });
         }
         if (prismaErr.code === 'P2025') {
             return res.status(404).json({

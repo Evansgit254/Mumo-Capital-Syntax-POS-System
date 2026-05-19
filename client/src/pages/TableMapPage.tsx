@@ -21,7 +21,7 @@ export default function TableMapPage() {
     
     const tablesQuery = useQuery({
         queryKey: ['tables'],
-        queryFn: tableService.getAll,
+        queryFn: () => tableService.getAll(),
     });
 
     const handleTableSelect = (tableId: string) => {
@@ -74,13 +74,13 @@ export default function TableMapPage() {
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-8">
                     {tablesQuery.isLoading ? (
                         Array(12).fill(0).map((_, i) => <Skeleton key={i} className="aspect-square rounded-3xl" />)
-                    ) : tablesQuery.data?.length === 0 ? (
+                    ) : tablesQuery.data?.data?.length === 0 ? (
                         <div className="col-span-full py-20 flex flex-col items-center justify-center opacity-20">
                             <AlertCircle size={64} className="mb-4" />
                             <p className="body-lg">No tables configured for this outlet.</p>
                         </div>
                     ) : (
-                        tablesQuery.data?.map(table => (
+                        tablesQuery.data?.data?.map(table => (
                             <div 
                                 key={table.id}
                                 onClick={() => handleTableSelect(table.id)}
@@ -124,7 +124,7 @@ export default function TableMapPage() {
                     {tablesQuery.isLoading ? (
                         Array(6).fill(0).map((_, i) => <Skeleton key={i} className="h-20 rounded-2xl" />)
                     ) : (
-                        tablesQuery.data?.map(table => (
+                        tablesQuery.data?.data?.map(table => (
                             <div 
                                 key={table.id}
                                 onClick={() => handleTableSelect(table.id)}
@@ -161,11 +161,11 @@ export default function TableMapPage() {
 
             {/* Bottom Bar Info - Only on Large Screens */}
             <div className="hidden lg:flex fixed bottom-10 left-1/2 -translate-x-1/2 bg-surface-container-highest/80 backdrop-blur-xl border border-outline-variant p-4 px-10 rounded-full shadow-2xl items-center gap-12 z-40">
-                <SummaryItem label="Total Tables" value={tablesQuery.data?.length || 0} />
+                <SummaryItem label="Total Tables" value={tablesQuery.data?.data?.length || 0} />
                 <div className="h-8 w-[1px] bg-white/10" />
-                <SummaryItem label="Available" value={tablesQuery.data?.filter(t => !t.isOccupied).length || 0} color="text-secondary" />
+                <SummaryItem label="Available" value={tablesQuery.data?.data?.filter(t => !t.isOccupied).length || 0} color="text-secondary" />
                 <div className="h-8 w-[1px] bg-white/10" />
-                <SummaryItem label="Occupancy" value={`${Math.round((tablesQuery.data?.filter(t => t.isOccupied).length || 0) / (tablesQuery.data?.length || 1) * 100)}%`} />
+                <SummaryItem label="Occupancy" value={`${Math.round((tablesQuery.data?.data?.filter(t => t.isOccupied).length || 0) / (tablesQuery.data?.data?.length || 1) * 100)}%`} />
             </div>
         </div>
     );

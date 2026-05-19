@@ -44,7 +44,7 @@ export default function WorkforcePage() {
                 }),
                 clockEventService.getAll()
             ]);
-            setUsers(usersRes);
+            setUsers(usersRes.data);
             setShifts(shiftsRes);
             setClockEvents(clocksRes);
         } catch (error) {

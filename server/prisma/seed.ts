@@ -227,7 +227,46 @@ async function main() {
             ],
         },
     });
-    console.log('   Role Permissions: STAFF customized\n');
+    console.log('   Role Permissions: STAFF customized');
+
+    // ── Edge Case Data (FIX 12 — CODEX-WARN-020) ────────────────────────────────
+    // Inactive user (for testing deactivation flow)
+    await prisma.user.create({
+        data: {
+            tenantId: tenant1.id,
+            email: 'inactive@grand.com',
+            password: hashedPassword,
+            firstName: 'Inactive',
+            lastName: 'User',
+            role: 'STAFF',
+            status: 'INACTIVE',
+            hourlyRate: 18,
+        },
+    });
+
+    // Cancelled reservation
+    await prisma.reservation.create({
+        data: {
+            tenantId: tenant1.id,
+            guestName: 'Cancelled Guest',
+            guestCount: 2,
+            startTime: new Date(),
+            status: 'CANCELLED',
+            tableId: t1Tables[0].id,
+        },
+    });
+
+    // Inventory item below minimum stock
+    const t1LowStockItem = await prisma.inventoryItem.findFirst({
+        where: { tenantId: tenant1.id },
+    });
+    if (t1LowStockItem) {
+        await prisma.inventoryItem.update({
+            where: { id: t1LowStockItem.id },
+            data: { currentStock: 2, minStock: 10 },
+        });
+    }
+    console.log('   Edge cases: inactive user, cancelled reservation, low stock item\n');
 
     // ══════════════════════════════════════════════════════════════════════════════
     // TENANT 2: Seaside Bistro
@@ -415,7 +454,46 @@ async function main() {
             ],
         },
     });
-    console.log('   Role Permissions: STAFF customized\n');
+    console.log('   Role Permissions: STAFF customized');
+
+    // ── Edge Case Data (FIX 12 — CODEX-WARN-020) ────────────────────────────────
+    // Inactive user (for testing deactivation flow)
+    await prisma.user.create({
+        data: {
+            tenantId: tenant2.id,
+            email: 'inactive@seaside.com',
+            password: hashedPassword,
+            firstName: 'Inactive',
+            lastName: 'User',
+            role: 'STAFF',
+            status: 'INACTIVE',
+            hourlyRate: 18,
+        },
+    });
+
+    // Cancelled reservation
+    await prisma.reservation.create({
+        data: {
+            tenantId: tenant2.id,
+            guestName: 'Cancelled Guest',
+            guestCount: 2,
+            startTime: new Date(),
+            status: 'CANCELLED',
+            tableId: t2Tables[0].id,
+        },
+    });
+
+    // Inventory item below minimum stock
+    const t2LowStockItem = await prisma.inventoryItem.findFirst({
+        where: { tenantId: tenant2.id },
+    });
+    if (t2LowStockItem) {
+        await prisma.inventoryItem.update({
+            where: { id: t2LowStockItem.id },
+            data: { currentStock: 2, minStock: 10 },
+        });
+    }
+    console.log('   Edge cases: inactive user, cancelled reservation, low stock item\n');
 
     // ══════════════════════════════════════════════════════════════════════════════
     // SHIFTS & CLOCK EVENTS

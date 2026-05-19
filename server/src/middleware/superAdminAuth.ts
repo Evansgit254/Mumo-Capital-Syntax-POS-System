@@ -31,7 +31,7 @@ export function superAdminAuth(
   if (!secret) throw new Error('SUPER_ADMIN_JWT_SECRET not set');
 
   try {
-    const payload = jwt.verify(token, secret) as SuperAdminPayload;
+    const payload = jwt.verify(token, secret, { algorithms: ['HS256'] }) as SuperAdminPayload;
     if (payload.role !== 'SUPER_ADMIN') {
       return next(new AppError('Unauthorized', 403));
     }

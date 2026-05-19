@@ -21,18 +21,18 @@ const REFRESH_EXPIRY = '7d';
 // ── Signing ──────────────────────────────────────────────────────────────────
 
 export function signAccessToken(payload: AuthPayload): string {
-    return jwt.sign(payload, ACCESS_SECRET, { expiresIn: ACCESS_EXPIRY });
+    return jwt.sign(payload, ACCESS_SECRET, { algorithm: 'HS256', expiresIn: ACCESS_EXPIRY });
 }
 
 export function signRefreshToken(payload: AuthPayload): string {
-    return jwt.sign(payload, REFRESH_SECRET, { expiresIn: REFRESH_EXPIRY });
+    return jwt.sign(payload, REFRESH_SECRET, { algorithm: 'HS256', expiresIn: REFRESH_EXPIRY });
 }
 
 // ── Verification ─────────────────────────────────────────────────────────────
 
 export function verifyAccessToken(token: string): AuthPayload {
     try {
-        return jwt.verify(token, ACCESS_SECRET) as AuthPayload;
+        return jwt.verify(token, ACCESS_SECRET, { algorithms: ['HS256'] }) as AuthPayload;
     } catch (err) {
         if (err instanceof TokenExpiredError) {
             throw unauthorized('Token has expired');
@@ -46,7 +46,7 @@ export function verifyAccessToken(token: string): AuthPayload {
 
 export function verifyRefreshToken(token: string): AuthPayload {
     try {
-        return jwt.verify(token, REFRESH_SECRET) as AuthPayload;
+        return jwt.verify(token, REFRESH_SECRET, { algorithms: ['HS256'] }) as AuthPayload;
     } catch (err) {
         if (err instanceof TokenExpiredError) {
             throw unauthorized('Refresh token has expired');

@@ -30,12 +30,12 @@ router.post('/', bookingLimiter, async (req, res) => {
 
         const data = bookingSchema.parse(req.body);
 
-        // Verify activity exists and has capacity
-        const activity = await prisma.activity.findUnique({
-            where: { id: data.activityId }
+        // FIX 4 — CODEX-CRIT-004: Database-level tenant scoping via findFirst
+        const activity = await prisma.activity.findFirst({
+            where: { id: data.activityId, tenantId }
         });
 
-        if (!activity || activity.tenantId !== tenantId) {
+        if (!activity) {
             return res.status(404).json({ error: 'Activity not found' });
         }
 
@@ -43,8 +43,8 @@ router.post('/', bookingLimiter, async (req, res) => {
             return res.status(400).json({ error: 'Activity is fully booked' });
         }
 
-        // Create booking and decrement slots in a transaction
-        const [booking, _] = await prisma.$transaction([
+        // FIX 4: Use updateMany with tenantId for slot decrement (database-level scoping)
+        const [booking, slotUpdate] = await prisma.$transaction([
             prisma.activityBooking.create({
                 data: {
                     tenantId,
@@ -54,9 +54,9 @@ router.post('/', bookingLimiter, async (req, res) => {
                     slotTime: new Date(data.slotTime)
                 }
             }),
-            prisma.activity.update({
-                where: { id: data.activityId },
-                data: { availableSlots: activity.availableSlots - 1 }
+            prisma.activity.updateMany({
+                where: { id: data.activityId, tenantId },
+                data: { availableSlots: { decrement: 1 } }
             })
         ]);
 

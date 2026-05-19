@@ -103,7 +103,7 @@ export default function ReservationsPage() {
                         active={activeTab === 'reservations'} 
                         onClick={() => setActiveTab('reservations')}
                         label="Reservations"
-                        count={reservationsQuery.data?.length}
+                        count={reservationsQuery.data?.data?.length}
                     />
                     <TabButton 
                         active={activeTab === 'waitlist'} 
@@ -138,7 +138,7 @@ export default function ReservationsPage() {
 
                         {reservationsQuery.isLoading ? (
                             <Skeleton className="h-64 rounded-2xl" />
-                        ) : reservationsQuery.data?.length === 0 ? (
+                        ) : reservationsQuery.data?.data?.length === 0 ? (
                             <EmptyState 
                                 icon={<Calendar size={32} />}
                                 title="No reservations for this date"
@@ -146,7 +146,7 @@ export default function ReservationsPage() {
                             />
                         ) : (
                             <div className="space-y-3">
-                                {reservationsQuery.data?.map(res => (
+                                {reservationsQuery.data?.data?.map(res => (
                                     <ReservationItem 
                                         key={res.id} 
                                         reservation={res} 

@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { lazy, Suspense } from 'react';
 import ProtectedRoute from './routes/ProtectedRoute';
 import Shell from './components/layout/Shell';
 
@@ -16,7 +17,6 @@ import KDSPage from './pages/KDSPage';
 import ReservationsPage from './pages/ReservationsPage';
 import MenuManagerPage from './pages/MenuManagerPage';
 import CheckoutPage from './pages/CheckoutPage';
-import ReportsPage from './pages/ReportsPage';
 import PermissionsPage from './pages/admin/PermissionsPage';
 import TenantPage from './pages/admin/TenantPage';
 import TableManagementPage from './pages/admin/TableManagementPage';
@@ -29,7 +29,6 @@ import BillingPage from './pages/BillingPage';
 import GuestDirectoryPage from './pages/GuestDirectoryPage';
 import GuestFolioPage from './pages/GuestFolioPage';
 import WorkforcePage from './pages/admin/WorkforcePage';
-import ExecutiveAnalyticsPage from './pages/admin/ExecutiveAnalyticsPage';
 import NotFoundPage from './pages/NotFoundPage';
 import HelpPage from './pages/HelpPage';
 import RegisterPage from './pages/onboarding/RegisterPage';
@@ -37,6 +36,11 @@ import ApplicationStatusPage from './pages/onboarding/ApplicationStatusPage';
 import SuperAdminLoginPage from './pages/super-admin/SuperAdminLoginPage';
 import SuperAdminApplicationsPage from './pages/super-admin/ApplicationsPage';
 import { Role } from '@mumo/types';
+import PageSkeleton from './components/ui/PageSkeleton';
+
+// FIX 2 — CODEX-WARN-019: Lazy-load chart-heavy pages
+const ReportsPage = lazy(() => import('./pages/ReportsPage'));
+const ExecutiveAnalyticsPage = lazy(() => import('./pages/admin/ExecutiveAnalyticsPage'));
 
 function App() {
     return (
@@ -87,7 +91,7 @@ function App() {
                         <Route path="/menu" element={<MenuManagerPage />} />
                         <Route path="/checkout" element={<CheckoutPage />} />
                         <Route path="/billing" element={<BillingPage />} />
-                        <Route path="/reports" element={<ReportsPage />} />
+                        <Route path="/reports" element={<Suspense fallback={<PageSkeleton />}><ReportsPage /></Suspense>} />
 
                         {/* Inventory (Manager/Admin) */}
                         <Route element={<ProtectedRoute allowedRoles={[Role.TENANT_ADMIN, Role.MANAGER]} />}>
@@ -107,7 +111,7 @@ function App() {
                             <Route path="/admin/permissions" element={<PermissionsPage />} />
                             <Route path="/admin/tenant" element={<TenantPage />} />
                             <Route path="/admin/tables" element={<TableManagementPage />} />
-                            <Route path="/admin/analytics" element={<ExecutiveAnalyticsPage />} />
+                            <Route path="/admin/analytics" element={<Suspense fallback={<PageSkeleton />}><ExecutiveAnalyticsPage /></Suspense>} />
                         </Route>
                         
                         {/* Root redirect */}

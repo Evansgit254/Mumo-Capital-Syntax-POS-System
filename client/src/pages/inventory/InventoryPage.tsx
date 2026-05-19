@@ -44,7 +44,7 @@ const InventoryPage: React.FC = () => {
 
     const { data: items, isLoading: itemsLoading } = useQuery({
         queryKey: ['inventory', filterAlerts],
-        queryFn: filterAlerts ? inventoryService.getAlerts : inventoryService.getAll,
+        queryFn: () => filterAlerts ? inventoryService.getAlerts() : inventoryService.getAll(),
     });
 
     const { data: auditData, isLoading: auditLoading } = useQuery({
@@ -56,19 +56,19 @@ const InventoryPage: React.FC = () => {
     const isLoading = activeTab === 'stock' ? itemsLoading : auditLoading;
 
     const filteredItems = useMemo(() => {
-        if (!items) return [];
-        return items.filter(item => 
+        if (!items?.data) return [];
+        return items.data.filter(item => 
             item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             item.sku?.toLowerCase().includes(searchQuery.toLowerCase())
         );
     }, [items, searchQuery]);
 
     const stats = useMemo(() => {
-        if (!items) return { total: 0, alerts: 0, value: 0 };
+        if (!items?.data) return { total: 0, alerts: 0, value: 0 };
         return {
-            total: items.length,
-            alerts: items.filter(i => i.currentStock < i.minStock).length,
-            value: items.reduce((sum, i) => sum + (i.currentStock * (i.costPerUnit || 0)), 0),
+            total: items.data.length,
+            alerts: items.data.filter(i => i.currentStock < i.minStock).length,
+            value: items.data.reduce((sum, i) => sum + (i.currentStock * (i.costPerUnit || 0)), 0),
         };
     }, [items]);
 
@@ -222,11 +222,11 @@ const InventoryPage: React.FC = () => {
                                 </button>
                                 <button 
                                     onClick={() => {
-                                        if (!items || items.length === 0) { toast.error('No inventory data to export'); return; }
+                                        if (!items?.data || items.data.length === 0) { toast.error('No inventory data to export'); return; }
                                         const date = new Date().toISOString().split('T')[0];
                                         downloadCSV(`mumo-inventory-${date}.csv`, [{
                                             header: 'Inventory Stock',
-                                            rows: items.map(i => ({
+                                            rows: items.data.map(i => ({
                                                 Name: i.name, SKU: i.sku || 'N/A', Unit: i.unit,
                                                 'Current Stock': i.currentStock, 'Min Stock': i.minStock,
                                                 'Cost/Unit (KES)': i.costPerUnit || 0,

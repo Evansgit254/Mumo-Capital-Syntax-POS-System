@@ -30,18 +30,19 @@ router.post('/external', async (req: Request, res: Response, next: NextFunction)
         const priceMap = new Map(menuItems.map((m) => [m.id, m.price]));
         const orderItems = items.map((item: { menuItemId: string; quantity: number }) => {
             const unitPrice = priceMap.get(item.menuItemId)!;
+            const subtotal = unitPrice.times(item.quantity).toDecimalPlaces(2);
             return {
                 menuItemId: item.menuItemId,
                 quantity: item.quantity,
                 unitPrice,
-                subtotal: unitPrice.times(item.quantity),
+                subtotal,
             };
         });
 
         const totalAmount = orderItems.reduce(
             (sum: Prisma.Decimal, oi: LooseValue) => sum.plus(oi.subtotal),
             new Prisma.Decimal(0)
-        );
+        ).toDecimalPlaces(2);
 
         const order = await prisma.order.create({
             data: {
@@ -72,19 +73,29 @@ router.post('/external', async (req: Request, res: Response, next: NextFunction)
 
 
 // ── GET /api/orders ──────────────────────────────────────────────────────────
+// FIX 4 — CODEX-WARN-012: Paginated list endpoint
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { tenantId } = req.user!;
-        const orders = await prisma.order.findMany({
-            where: { tenantId },
-            include: {
-                items: { include: { menuItem: { select: { name: true, categoryId: true } } } },
-                table: { select: { number: true } },
-                user: { select: { firstName: true, lastName: true } },
-                payments: { select: { method: true, amount: true, status: true } },
-            },
-            orderBy: { createdAt: 'desc' },
-        });
+        const page = Math.max(1, Number(req.query.page) || 1);
+        const limit = Math.min(100, Number(req.query.limit) || 50);
+        const skip = (page - 1) * limit;
+
+        const [orders, total] = await Promise.all([
+            prisma.order.findMany({
+                where: { tenantId },
+                include: {
+                    items: { include: { menuItem: { select: { name: true, categoryId: true } } } },
+                    table: { select: { number: true } },
+                    user: { select: { firstName: true, lastName: true } },
+                    payments: { select: { method: true, amount: true, status: true } },
+                },
+                orderBy: { createdAt: 'desc' },
+                skip,
+                take: limit,
+            }),
+            prisma.order.count({ where: { tenantId } }),
+        ]);
 
         const serialized = orders.map(order => ({
             ...order,
@@ -100,7 +111,13 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
             }))
         }));
 
-        res.json(serialized);
+        res.json({
+            data: serialized,
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+        });
     } catch (err) {
         next(err);
     }
@@ -217,18 +234,19 @@ router.post(
             // Calculate line items from server-side prices
             const orderItems = items.map((item: { menuItemId: string; quantity: number }) => {
                 const unitPrice = priceMap.get(item.menuItemId)!;
+                const subtotal = unitPrice.times(item.quantity).toDecimalPlaces(2);
                 return {
                     menuItemId: item.menuItemId,
                     quantity: item.quantity,
                     unitPrice,
-                    subtotal: unitPrice.times(item.quantity),
+                    subtotal,
                 };
             });
 
             const totalAmount = orderItems.reduce(
                 (sum: Prisma.Decimal, oi: LooseValue) => sum.plus(oi.subtotal),
                 new Prisma.Decimal(0)
-            );
+            ).toDecimalPlaces(2);
 
             const order = await prisma.order.create({
                 data: {

@@ -10,10 +10,14 @@ import { Role } from '@mumo/types';
 const router = Router();
 
 // ── GET /api/customers ──────────────────────────────────────────────────────
+// FIX 4 — CODEX-WARN-012: Paginated list endpoint
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { tenantId } = req.user!;
         const { search } = req.query;
+        const page = Math.max(1, Number(req.query.page) || 1);
+        const limit = Math.min(100, Number(req.query.limit) || 50);
+        const skip = (page - 1) * limit;
 
         const where: Record<string, unknown> = { tenantId };
 
@@ -25,14 +29,26 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
             ];
         }
 
-        const customers = await prisma.customer.findMany({
-            where,
-            orderBy: { name: 'asc' },
+        const [customers, total] = await Promise.all([
+            prisma.customer.findMany({
+                where,
+                orderBy: { name: 'asc' },
+                skip,
+                take: limit,
+            }),
+            prisma.customer.count({ where }),
+        ]);
+
+        res.json({
+            data: customers.map(c => ({
+                ...c,
+                totalSpend: c.totalSpend.toNumber()
+            })),
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
         });
-        res.json(customers.map(c => ({
-            ...c,
-            totalSpend: c.totalSpend.toNumber()
-        })));
     } catch (err) {
         next(err);
     }
@@ -62,11 +78,14 @@ router.post(
     async (req: Request, res: Response, next: NextFunction) => {
         try {
             const { tenantId } = req.user!;
+            // FIX 3 — CODEX-WARN-004: Explicit field mapping (no mass assignment)
             const customer = await prisma.customer.create({
                 data: {
-                    ...req.body,
                     tenantId,
-                    totalSpend: new Prisma.Decimal(req.body.totalSpend || 0)
+                    name: req.body.name,
+                    email: req.body.email,
+                    phone: req.body.phone,
+                    totalSpend: new Prisma.Decimal(req.body.totalSpend || 0),
                 },
             });
             res.status(201).json({
@@ -93,11 +112,15 @@ router.put(
             });
             if (!existing) throw notFound('Customer not found');
 
+            // FIX 3 — CODEX-WARN-004: Explicit field mapping (no mass assignment)
             const updated = await prisma.customer.update({
                 where: { id: req.params.id },
                 data: {
-                    ...req.body,
-                    totalSpend: req.body.totalSpend !== undefined ? new Prisma.Decimal(req.body.totalSpend) : undefined
+                    name: req.body.name,
+                    email: req.body.email,
+                    phone: req.body.phone,
+                    loyaltyPoints: req.body.loyaltyPoints,
+                    totalSpend: req.body.totalSpend !== undefined ? new Prisma.Decimal(req.body.totalSpend) : undefined,
                 },
             });
             res.json({

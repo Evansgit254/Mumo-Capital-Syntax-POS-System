@@ -22,7 +22,7 @@ import { cn } from '../lib/utils';
 import EmptyState from '../components/ui/EmptyState';
 import Skeleton from '../components/ui/Skeleton';
 import { Navigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 
 export default function KDSPage() {
     const { session } = useStore();
@@ -42,16 +42,36 @@ export default function KDSPage() {
         // But let's follow the requirement: ADMIN (TENANT_ADMIN), MANAGER, and presumably STAFF (WAITER).
     }
 
-    // Refresh time for urgency calculation
+    // FIX 1 — CODEX-WARN-018: Visibility-aware timer
+    const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
     useEffect(() => {
-        const interval = setInterval(() => setNow(new Date()), 1000);
-        return () => clearInterval(interval);
+        timerRef.current = setInterval(() => setNow(new Date()), 1000);
+        return () => { if (timerRef.current) clearInterval(timerRef.current); };
+    }, []);
+
+    // Pause/resume timer when tab visibility changes
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'hidden') {
+                if (timerRef.current) clearInterval(timerRef.current);
+            } else {
+                timerRef.current = setInterval(() => setNow(new Date()), 1000);
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
     }, []);
 
     const kdsQuery = useQuery({
         queryKey: ['orders-live'],
         queryFn: orderService.getLive,
-        refetchInterval: 10000,
+        refetchInterval: () => {
+            // FIX 1: Stop polling when tab is hidden
+            if (document.visibilityState === 'hidden') return false;
+            return 10_000; // 10 seconds when visible
+        },
+        refetchIntervalInBackground: false,
     });
 
     const updateStatusMutation = useMutation({

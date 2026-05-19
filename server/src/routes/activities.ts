@@ -42,11 +42,14 @@ router.get('/', publicLimiter, async (req, res) => {
 router.get('/:id', publicLimiter, async (req, res) => {
     try {
         const tenantId = req.headers['x-tenant-id'] as string;
-        const activity = await prisma.activity.findUnique({
-            where: { id: req.params.id }
+        if (!tenantId) return res.status(400).json({ error: 'Tenant ID required' });
+
+        // FIX 4 — CODEX-CRIT-004: Database-level tenant scoping via findFirst
+        const activity = await prisma.activity.findFirst({
+            where: { id: req.params.id, tenantId }
         });
 
-        if (!activity || activity.tenantId !== tenantId) {
+        if (!activity) {
             return res.status(404).json({ error: 'Activity not found' });
         }
 

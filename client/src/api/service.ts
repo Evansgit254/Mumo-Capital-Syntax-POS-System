@@ -51,6 +51,16 @@ type FolioCheckoutResponse = { folioId: string; totalSettled: number; payments: 
 type ShiftInput = { userId?: string; date?: string; startTime?: string; endTime?: string; station?: string };
 type AuditLogResponse = { logs: InventoryAuditLog[]; total: number; page: number; limit: number };
 
+// FIX 4 — CODEX-WARN-012: Standard paginated response envelope
+export type PaginatedResponse<T> = {
+    data: T[];
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+};
+type PaginationParams = { page?: number; limit?: number };
+
 // ── Axios Instance ───────────────────────────────────────────────────────────
 const API_URL = import.meta.env.VITE_API_URL;
 if (!API_URL) throw new Error(
@@ -194,7 +204,7 @@ export const authService = {
 };
 
 export const menuService = {
-    getAll: () => api.get<MenuItem[]>('/api/menus').then(r => r.data),
+    getAll: (params?: PaginationParams) => api.get<PaginatedResponse<MenuItem>>('/api/menus', { params }).then(r => r.data),
     getOne: (id: string) => api.get<MenuItem>(`/api/menus/${id}`).then(r => r.data),
     getModifiers: (id: string) => api.get<{ id: string; name: string; price: number }[]>(`/api/menus/${id}/modifiers`).then(r => r.data),
     create: (data: Partial<MenuItem>) => api.post<MenuItem>('/api/menus', data).then(r => r.data),
@@ -203,7 +213,7 @@ export const menuService = {
 };
 
 export const orderService = {
-    getAll: () => api.get<Order[]>('/api/orders').then(r => r.data),
+    getAll: (params?: PaginationParams) => api.get<PaginatedResponse<Order>>('/api/orders', { params }).then(r => r.data),
     getLive: () => api.get<Order[]>('/api/orders/live').then(r => r.data),
     getOne: (id: string) => api.get<Order>(`/api/orders/${id}`).then(r => r.data),
     create: (data: { tableId?: string; items: { menuItemId: string; quantity: number }[] }) => 
@@ -213,7 +223,7 @@ export const orderService = {
 };
 
 export const tableService = {
-    getAll: () => api.get<Table[]>('/api/tables').then(r => r.data),
+    getAll: (params?: PaginationParams) => api.get<PaginatedResponse<Table>>('/api/tables', { params }).then(r => r.data),
     getOne: (id: string) => api.get<Table>(`/api/tables/${id}`).then(r => r.data),
     getOrders: (id: string) => api.get<Order[]>(`/api/tables/${id}/orders`).then(r => r.data),
     create: (data: Partial<Table>) => api.post<Table>('/api/tables', data).then(r => r.data),
@@ -226,8 +236,8 @@ export const tableService = {
 };
 
 export const reservationService = {
-    getAll: (params?: { date?: string; status?: string }) => 
-        api.get<Reservation[]>('/api/reservations', { params }).then(r => r.data),
+    getAll: (params?: { date?: string; status?: string; page?: number; limit?: number }) => 
+        api.get<PaginatedResponse<Reservation>>('/api/reservations', { params }).then(r => r.data),
     getWaitlist: () => api.get<Reservation[]>('/api/reservations/waitlist').then(r => r.data),
     getOne: (id: string) => api.get<Reservation>(`/api/reservations/${id}`).then(r => r.data),
     create: (data: ReservationInput) => api.post<Reservation>('/api/reservations', data).then(r => r.data),
@@ -237,8 +247,8 @@ export const reservationService = {
 };
 
 export const inventoryService = {
-    getAll: () => api.get<InventoryItem[]>('/api/inventory').then(r => r.data),
-    getAlerts: () => api.get<InventoryItem[]>('/api/inventory', { params: { alert: true } }).then(r => r.data),
+    getAll: (params?: PaginationParams) => api.get<PaginatedResponse<InventoryItem>>('/api/inventory', { params }).then(r => r.data),
+    getAlerts: (params?: PaginationParams) => api.get<PaginatedResponse<InventoryItem>>('/api/inventory', { params: { alert: true, ...params } }).then(r => r.data),
     getOne: (id: string) => api.get<InventoryItem>(`/api/inventory/${id}`).then(r => r.data),
     create: (data: InventoryInput) => api.post<InventoryItem>('/api/inventory', data).then(r => r.data),
     update: (id: string, data: InventoryInput) => api.put<InventoryItem>(`/api/inventory/${id}`, data).then(r => r.data),
@@ -249,7 +259,7 @@ export const inventoryService = {
 };
 
 export const vendorService = {
-    getAll: () => api.get<Vendor[]>('/api/vendors').then(r => r.data),
+    getAll: (params?: PaginationParams) => api.get<PaginatedResponse<Vendor>>('/api/vendors', { params }).then(r => r.data),
     getOne: (id: string) => api.get<Vendor>(`/api/vendors/${id}`).then(r => r.data),
     create: (data: VendorInput) => api.post<Vendor>('/api/vendors', data).then(r => r.data),
     update: (id: string, data: VendorInput) => api.put<Vendor>(`/api/vendors/${id}`, data).then(r => r.data),
@@ -264,8 +274,8 @@ export const purchaseOrderService = {
 };
 
 export const customerService = {
-    getAll: (search?: string) => 
-        api.get<Customer[]>('/api/customers', { params: { search } }).then(r => r.data),
+    getAll: (search?: string, params?: PaginationParams) => 
+        api.get<PaginatedResponse<Customer>>('/api/customers', { params: { search, ...params } }).then(r => r.data),
     create: (data: CustomerInput) => api.post<Customer>('/api/customers', data).then(r => r.data),
     update: (id: string, data: CustomerInput) => api.put<Customer>(`/api/customers/${id}`, data).then(r => r.data),
 };
@@ -276,7 +286,7 @@ export const tenantService = {
 };
 
 export const userService = {
-    getAll: () => api.get<UserWithOptionalStatus[]>('/api/users').then(r => r.data),
+    getAll: (params?: PaginationParams) => api.get<PaginatedResponse<UserWithOptionalStatus>>('/api/users', { params }).then(r => r.data),
     create: (data: CreateUserInput) => api.post<User>('/api/users', data).then(r => r.data),
     updateRole: (id: string, role: string) => 
         api.put<User>(`/api/users/${id}/role`, { role }).then(r => r.data),
@@ -294,7 +304,7 @@ export const permissionService = {
 };
 
 export const paymentService = {
-    getAll: () => api.get<Payment[]>('/api/payments').then(r => r.data),
+    getAll: (params?: PaginationParams) => api.get<PaginatedResponse<Payment>>('/api/payments', { params }).then(r => r.data),
     getOne: (id: string) => api.get<Payment>(`/api/payments/${id}`).then(r => r.data),
     create: (data: { orderId: string; amount: number; method: string }) => 
         api.post<Payment>('/api/payments', data).then(r => r.data),

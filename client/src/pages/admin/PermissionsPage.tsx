@@ -41,7 +41,7 @@ export default function PermissionsPage() {
 
     const usersQuery = useQuery({
         queryKey: ['users'],
-        queryFn: userService.getAll,
+        queryFn: () => userService.getAll(),
     });
 
     const createMutation = useMutation({
@@ -98,7 +98,7 @@ export default function PermissionsPage() {
         onSettled: () => queryClient.invalidateQueries({ queryKey: ['users'] }),
     });
 
-    const users = usersQuery.data || [];
+    const users = usersQuery.data?.data || [];
     const filtered = users.filter(
         (u: LooseValue) =>
             u.firstName?.toLowerCase().includes(search.toLowerCase()) ||

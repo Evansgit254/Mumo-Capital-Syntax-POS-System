@@ -18,13 +18,13 @@ export default function TableActionModal({ type, sourceTable, onClose, onSubmit,
 
     const tablesQuery = useQuery({
         queryKey: ['tables'],
-        queryFn: tableService.getAll,
+        queryFn: () => tableService.getAll(),
     });
 
     // Filter tables:
     // - For Transfer: must be Available (NOT occupied) and NOT the source table
     // - For Merge: must be Occupied and NOT the source table
-    const targetTables = tablesQuery.data?.filter(t => {
+    const targetTables = tablesQuery.data?.data?.filter((t: Table) => {
         if (t.id === sourceTable.id) return false;
         if (type === 'transfer') return !t.isOccupied;
         if (type === 'merge') return t.isOccupied;

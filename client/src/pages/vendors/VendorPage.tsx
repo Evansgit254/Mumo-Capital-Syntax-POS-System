@@ -41,7 +41,7 @@ const VendorPage: React.FC = () => {
 
     const { data: vendors, isLoading: vendorsLoading } = useQuery({
         queryKey: ['vendors'],
-        queryFn: vendorService.getAll,
+        queryFn: () => vendorService.getAll(),
     });
 
     const { data: purchaseOrders, isLoading: posLoading } = useQuery({
@@ -140,7 +140,7 @@ const VendorPage: React.FC = () => {
                             <div>Status</div>
                             <div className="text-right">Actions</div>
                         </div>
-                        {vendors?.map((vendor: LooseValue) => (
+                        {vendors?.data?.map((vendor: LooseValue) => (
                             <div key={vendor.id} className="grid grid-cols-1 md:grid-cols-5 gap-4 md:gap-6 px-8 py-6 items-center hover:bg-surface-container-low/30 transition-colors">
                                 <div className="col-span-2 flex items-center gap-4">
                                      <div className="h-12 w-12 rounded-xl bg-surface-container-high flex items-center justify-center text-primary">

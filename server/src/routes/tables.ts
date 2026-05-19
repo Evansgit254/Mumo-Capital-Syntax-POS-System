@@ -4,6 +4,7 @@ import { notFound } from '../lib/errors';
 import { validate } from '../middleware/validate';
 import { requireRole } from '../middleware/requireRole';
 import { createTableSchema, updateTableSchema, batchUpdateTablesSchema } from '../validators/table';
+import { getTenantId } from '../lib/tenant';
 import { Role } from '@mumo/types';
 
 const router = Router();
@@ -11,7 +12,7 @@ const router = Router();
 // ── GET /public (Guest Facing) ───────────────────────────────────────────────
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const tenantId = req.headers['x-tenant-id'] as string;
+        const tenantId = getTenantId(req);
         const tables = await prisma.table.findMany({
             where: { tenantId },
             orderBy: { number: 'asc' },
@@ -23,14 +24,31 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
 });
 
 // ── GET /api/tables ──────────────────────────────────────────────────────────
+// FIX 4 — CODEX-WARN-012: Paginated list endpoint
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { tenantId } = req.user!;
-        const tables = await prisma.table.findMany({
-            where: { tenantId },
-            orderBy: { number: 'asc' },
+        const page = Math.max(1, Number(req.query.page) || 1);
+        const limit = Math.min(100, Number(req.query.limit) || 50);
+        const skip = (page - 1) * limit;
+
+        const [tables, total] = await Promise.all([
+            prisma.table.findMany({
+                where: { tenantId },
+                orderBy: { number: 'asc' },
+                skip,
+                take: limit,
+            }),
+            prisma.table.count({ where: { tenantId } }),
+        ]);
+
+        res.json({
+            data: tables,
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
         });
-        res.json(tables);
     } catch (err) {
         next(err);
     }
@@ -109,8 +127,17 @@ router.post(
     async (req: Request, res: Response, next: NextFunction) => {
         try {
             const { tenantId } = req.user!;
+            // FIX 3 — CODEX-WARN-004: Explicit field mapping (no mass assignment)
             const table = await prisma.table.create({
-                data: { ...req.body, tenantId },
+                data: {
+                    tenantId,
+                    number: req.body.number,
+                    capacity: req.body.capacity,
+                    x: req.body.x,
+                    y: req.body.y,
+                    zone: req.body.zone,
+                    shape: req.body.shape,
+                },
             });
             res.status(201).json(table);
         } catch (err) {
@@ -146,12 +173,19 @@ router.put(
             }
 
             // 2. Execute transaction
+            // FIX 3 — CODEX-WARN-004: Explicit field mapping (no mass assignment)
             const result = await prisma.$transaction(
                 tables.map((t: LooseValue) => {
-                    const { id, ...data } = t;
                     return prisma.table.update({
-                        where: { id },
-                        data
+                        where: { id: t.id },
+                        data: {
+                            number: t.number,
+                            capacity: t.capacity,
+                            x: t.x,
+                            y: t.y,
+                            zone: t.zone,
+                            shape: t.shape,
+                        },
                     });
                 })
             );
@@ -177,9 +211,18 @@ router.put(
             });
             if (!existing) throw notFound('Table not found');
 
+            // FIX 3 — CODEX-WARN-004: Explicit field mapping (no mass assignment)
             const updated = await prisma.table.update({
                 where: { id: req.params.id },
-                data: req.body,
+                data: {
+                    number: req.body.number,
+                    capacity: req.body.capacity,
+                    isOccupied: req.body.isOccupied,
+                    x: req.body.x,
+                    y: req.body.y,
+                    zone: req.body.zone,
+                    shape: req.body.shape,
+                },
             });
             res.json(updated);
         } catch (err) {

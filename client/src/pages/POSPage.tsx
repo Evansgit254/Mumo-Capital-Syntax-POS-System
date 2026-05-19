@@ -65,12 +65,12 @@ export default function POSPage() {
 
     const menuQuery = useQuery({
         queryKey: ['menus'],
-        queryFn: menuService.getAll,
+        queryFn: () => menuService.getAll(),
     });
 
     const tablesQuery = useQuery({
         queryKey: ['tables'],
-        queryFn: tableService.getAll,
+        queryFn: () => tableService.getAll(),
     });
 
     const tableQuery = useQuery({
@@ -85,15 +85,15 @@ export default function POSPage() {
     });
 
     // Filtering logic
-    const categories = Array.from(new Set(menuQuery.data?.map(i => i.categoryId).filter(Boolean))) as string[];
+    const categories = Array.from(new Set(menuQuery.data?.data?.map(i => i.categoryId).filter(Boolean))) as string[];
     
-    const filteredItems = menuQuery.data?.filter(item => {
+    const filteredItems = menuQuery.data?.data?.filter(item => {
         const matchesCategory = !activeCategory || item.categoryId === activeCategory;
         const matchesSearch = item.name.toLowerCase().includes(searchQuery.toLowerCase());
         return matchesCategory && matchesSearch && item.isAvailable;
     });
 
-    const activeTable = tableQuery.data || tablesQuery.data?.find(t => t.id === cart.tableId);
+    const activeTable = tableQuery.data || tablesQuery.data?.data?.find(t => t.id === cart.tableId);
 
     const totalAmount = cart.items.reduce((sum, item) => sum + item.subtotal, 0);
 

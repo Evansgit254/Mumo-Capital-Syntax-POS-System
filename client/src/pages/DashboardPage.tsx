@@ -38,12 +38,12 @@ export default function DashboardPage() {
     // Queries
     const ordersQuery = useQuery({
         queryKey: ['orders'],
-        queryFn: orderService.getAll,
+        queryFn: () => orderService.getAll(),
     });
 
     const tablesQuery = useQuery({
         queryKey: ['tables'],
-        queryFn: tableService.getAll,
+        queryFn: () => tableService.getAll(),
     });
 
     const reservationsQuery = useQuery({
@@ -53,12 +53,12 @@ export default function DashboardPage() {
 
     const inventoryAlertsQuery = useQuery({
         queryKey: ['inventory', 'alerts'],
-        queryFn: inventoryService.getAlerts,
+        queryFn: () => inventoryService.getAlerts(),
     });
 
     const staffQuery = useQuery({
         queryKey: ['users'],
-        queryFn: userService.getAll,
+        queryFn: () => userService.getAll(),
         enabled: session.role === 'TENANT_ADMIN' || session.role === 'MANAGER',
     });
 
@@ -71,15 +71,15 @@ export default function DashboardPage() {
         return d.toISOString().split('T')[0];
     }, []);
 
-    const todayOrders = useMemo(() => ordersQuery.data?.filter(o => {
+    const todayOrders = useMemo(() => (ordersQuery.data?.data || []).filter(o => {
         const orderDate = new Date(o.createdAt).toISOString().split('T')[0];
         return orderDate === todayStr;
-    }) || [], [ordersQuery.data, todayStr]);
+    }), [ordersQuery.data, todayStr]);
 
-    const yesterdayOrders = useMemo(() => ordersQuery.data?.filter(o => {
+    const yesterdayOrders = useMemo(() => (ordersQuery.data?.data || []).filter(o => {
         const orderDate = new Date(o.createdAt).toISOString().split('T')[0];
         return orderDate === yesterdayStr;
-    }) || [], [ordersQuery.data, yesterdayStr]);
+    }), [ordersQuery.data, yesterdayStr]);
 
     const totalRevenue = todayOrders.reduce((sum, o) => sum + o.totalAmount, 0);
     const yesterdayRevenue = yesterdayOrders.reduce((sum, o) => sum + o.totalAmount, 0);
@@ -91,7 +91,7 @@ export default function DashboardPage() {
     }, [totalRevenue, yesterdayRevenue]);
 
     const avgPrepTime = useMemo(() => {
-        const servedOrders = (ordersQuery.data || []).filter(o => o.status === OrderStatus.SERVED);
+        const servedOrders = (ordersQuery.data?.data || []).filter(o => o.status === OrderStatus.SERVED);
         if (servedOrders.length === 0) return 'avg. prep time: --';
         const total = servedOrders.reduce((sum, o) => sum + (new Date(o.updatedAt).getTime() - new Date(o.createdAt).getTime()), 0);
         const mins = Math.round((total / servedOrders.length) / 60000);
@@ -102,10 +102,10 @@ export default function DashboardPage() {
 
     // Occupancy Logic
     const occupancyData = useMemo(() => {
-        if (!tablesQuery.data) return { occupied: 0, reserved: 0, available: 0, total: 0 };
+        if (!tablesQuery.data?.data) return { occupied: 0, reserved: 0, available: 0, total: 0 };
         
-        const tables = tablesQuery.data;
-        const reservations = reservationsQuery.data || [];
+        const tables = tablesQuery.data.data;
+        const reservations = reservationsQuery.data?.data || [];
         
         // A table is reserved if it has a confirmed booking today
         const reservedTableIds = new Set(
@@ -128,7 +128,7 @@ export default function DashboardPage() {
         return { occupied, reserved, available, total: tables.length };
     }, [tablesQuery.data, reservationsQuery.data]);
 
-    const activeStaff = staffQuery.data?.filter(u => u.status === 'ACTIVE').length || 0;
+    const activeStaff = staffQuery.data?.data?.filter(u => u.status === 'ACTIVE').length || 0;
 
     return (
         <div className="p-6 tablet:p-10 space-y-10">
@@ -236,7 +236,7 @@ export default function DashboardPage() {
                         <div className="card-default p-0 overflow-hidden">
                             {isLoading ? (
                                 <Skeleton className="h-40 w-full" />
-                            ) : !inventoryAlertsQuery.data || inventoryAlertsQuery.data.length === 0 ? (
+                            ) : !inventoryAlertsQuery.data?.data || inventoryAlertsQuery.data.data.length === 0 ? (
                                 <div className="p-10 flex flex-col items-center justify-center text-center">
                                     <div className="h-16 w-16 rounded-full bg-secondary/10 flex items-center justify-center text-secondary mb-4">
                                         <CheckCircle2 size={32} />
@@ -246,7 +246,7 @@ export default function DashboardPage() {
                                 </div>
                             ) : (
                                 <div className="divide-y divide-outline-variant/30">
-                                    {inventoryAlertsQuery.data.map((item: InventoryItem) => (
+                                    {inventoryAlertsQuery.data.data.map((item: InventoryItem) => (
                                         <div key={item.id} className="p-5 flex items-center justify-between hover:bg-white/5 transition-colors">
                                             <div className="flex items-center gap-4">
                                                 <div className="h-10 w-10 rounded-lg bg-red-500/10 flex items-center justify-center text-red-500">
@@ -318,7 +318,7 @@ export default function DashboardPage() {
                         <div className="space-y-3">
                             {isLoading ? (
                                 Array(2).fill(0).map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-2xl" />)
-                            ) : !reservationsQuery.data || reservationsQuery.data.length === 0 ? (
+                            ) : !reservationsQuery.data?.data || reservationsQuery.data.data.length === 0 ? (
                                 <div className="p-8 bg-surface-container/30 rounded-3xl border border-dashed border-outline-variant text-center space-y-2">
                                     <div className="h-10 w-10 bg-surface-container-highest rounded-full flex items-center justify-center mx-auto text-on-surface-variant/40">
                                         <Calendar size={20} />
@@ -326,7 +326,7 @@ export default function DashboardPage() {
                                     <p className="body-sm text-on-surface-variant font-medium">No reservations today</p>
                                 </div>
                             ) : (
-                                reservationsQuery.data.slice(0, 5).map((res: LooseValue) => (
+                                reservationsQuery.data.data.slice(0, 5).map((res: LooseValue) => (
                                     <div key={res.id} className="card-default !p-4 flex items-center gap-4 hover:border-secondary/40 transition-colors">
                                         <div className="h-12 w-12 rounded-xl bg-surface-container-high flex flex-col items-center justify-center shrink-0 border border-outline-variant/30">
                                             <span className="text-[10px] font-bold text-secondary uppercase -mb-1">

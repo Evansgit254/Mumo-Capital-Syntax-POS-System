@@ -36,7 +36,7 @@ export default function MenuManagerPage() {
 
     const menuQuery = useQuery({
         queryKey: ['menus'],
-        queryFn: menuService.getAll,
+        queryFn: () => menuService.getAll(),
     });
 
     const deleteMutation = useMutation({
@@ -45,7 +45,7 @@ export default function MenuManagerPage() {
         onError: (err) => toast.error(getErrorMessage(err)),
     });
 
-    const filteredItems = menuQuery.data?.filter(item => 
+    const filteredItems = menuQuery.data?.data?.filter(item => 
         item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         item.categoryId?.toLowerCase().includes(searchQuery.toLowerCase())
     );
@@ -55,7 +55,7 @@ export default function MenuManagerPage() {
 
     const categories = useMemo(() => {
         const base = ['GENERAL', 'STARTER', 'MAIN', 'DESSERT', 'DRINK'];
-        const existing = menuQuery.data?.map(i => i.categoryId).filter(Boolean) as string[] || [];
+        const existing = menuQuery.data?.data?.map(i => i.categoryId).filter(Boolean) as string[] || [];
         return Array.from(new Set([...base, ...existing]));
     }, [menuQuery.data]);
 
@@ -178,7 +178,7 @@ export default function MenuManagerPage() {
             {/* Pagination / Summary */}
             <div className="flex items-center justify-between px-6">
                 <span className="label-sm text-on-surface-variant/60 lowercase italic">
-                    Showing {filteredItems?.length || 0} of {menuQuery.data?.length || 0} total items
+                    Showing {filteredItems?.length || 0} of {menuQuery.data?.total || 0} total items
                 </span>
                 <div className="flex gap-2">
                     <button 

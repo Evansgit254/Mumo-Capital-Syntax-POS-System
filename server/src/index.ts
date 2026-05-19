@@ -12,12 +12,12 @@ import { errorHandler } from './middleware/errorHandler';
 import { logger } from './lib/logger';
 import { prisma } from './lib/prisma';
 
-import authRoutes from './routes/auth';
+import authRoutes, { cleanupInterval } from './routes/auth';
 import menuRoutes from './routes/menus';
 import orderRoutes from './routes/orders';
 import tableRoutes from './routes/tables';
 import paymentRoutes from './routes/payments';
-import reservationRoutes from './routes/reservations';
+import { publicReservationRouter, staffReservationRouter } from './routes/reservations';
 import customerRoutes from './routes/customers';
 import discountRoutes from './routes/discounts';
 import inventoryRoutes from './routes/inventory';
@@ -65,8 +65,22 @@ app.use(express.json());
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
 // ── Public Routes ────────────────────────────────────────────────────────────
-app.get('/health', (_req, res) => {
-    res.json({ status: 'OK', message: 'Mumo POS Server Running', timestamp: new Date().toISOString() });
+app.get('/health', async (_req, res) => {
+    try {
+        await prisma.$queryRaw`SELECT 1`;
+        res.json({
+            status: 'OK',
+            database: 'connected',
+            timestamp: new Date().toISOString(),
+            version: process.env.npm_package_version || '1.0.0',
+        });
+    } catch (err) {
+        res.status(503).json({
+            status: 'ERROR',
+            database: 'disconnected',
+            timestamp: new Date().toISOString(),
+        });
+    }
 });
 
 app.use('/auth', authRoutes);
@@ -74,7 +88,7 @@ app.use('/api/onboarding', onboardingRouter);
 app.use('/api/super-admin', superAdminAuthRouter);
 
 // ── Public API Routes (require tenant ID but no JWT) ──────────────────────
-app.use('/api/public/reservations', extractTenant, reservationRoutes);
+app.use('/api/public/reservations', extractTenant, publicReservationRouter);
 app.use('/api/public/orders', extractTenant, orderRoutes);
 app.use('/api/public/menus', extractTenant, menuRoutes);
 app.use('/api/public/tables', extractTenant, tableRoutes);
@@ -90,7 +104,7 @@ app.use('/api/menus', authenticate, menuRoutes);
 app.use('/api/orders', authenticate, orderRoutes);
 app.use('/api/tables', authenticate, tableRoutes);
 app.use('/api/payments', authenticate, paymentRoutes);
-app.use('/api/reservations', authenticate, reservationRoutes);
+app.use('/api/reservations', authenticate, staffReservationRouter);
 app.use('/api/customers', authenticate, customerRoutes);
 app.use('/api/discounts', authenticate, discountRoutes);
 app.use('/api/inventory', authenticate, inventoryRoutes);
@@ -174,6 +188,7 @@ if (process.env.NODE_ENV === 'production') {
 // ── Graceful Shutdown ────────────────────────────────────────────────────────
 const shutdown = async (signal: string) => {
     logger.info(`${signal} received — shutting down gracefully`);
+    clearInterval(cleanupInterval); // FIX 2 — CODEX-WARN-003: Clear cleanup interval on shutdown
     server.close(async () => {
         await prisma.$disconnect();
         logger.info('Server closed and database disconnected');

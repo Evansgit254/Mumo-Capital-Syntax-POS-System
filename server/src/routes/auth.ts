@@ -17,6 +17,10 @@ const SALT_ROUNDS = 12;
 const REFRESH_TOKEN_EXPIRY_DAYS = 7;
 const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
+// FIX 6 — CODEX-CRIT-006: Precomputed dummy hash for timing-attack prevention.
+// Always run bcrypt.compare() even when user is not found.
+const DUMMY_HASH = '$2b$12$LJ3m4ys3Lzwpzen.Dv0eOe1JEaVPq3B3qUBfVVqFmxJ1kGpQvS6.e';
+
 /**
  * Set the refresh token as an httpOnly cookie.
  * FIX 11 — WARN-018: Never expose refresh tokens in response body or localStorage.
@@ -152,21 +156,27 @@ router.post(
 );
 
 // ── POST /auth/login ─────────────────────────────────────────────────────────
+// FIX 5 — CODEX-CRIT-005: Scope user lookup by tenantId (no global email unique)
 router.post('/login', authLimiter, validate(loginSchema), async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { email, password } = req.body;
 
-        const user = await prisma.user.findUnique({
-            where: { email },
+        // FIX 5: Resolve tenant from request header or subdomain
+        const tenantId = req.headers['x-tenant-id'] as string;
+        if (!tenantId) {
+            throw unauthorized('Tenant ID required for login');
+        }
+
+        const user = await prisma.user.findFirst({
+            where: { email: email.toLowerCase().trim(), tenantId },
             include: { tenant: true },
         });
 
-        if (!user) {
-            throw unauthorized('Invalid email or password');
-        }
+        // FIX 6 — CODEX-CRIT-006: Always compare to prevent timing attack
+        const passwordToCompare = user?.password ?? DUMMY_HASH;
+        const valid = await bcrypt.compare(password, passwordToCompare);
 
-        const valid = await bcrypt.compare(password, user.password);
-        if (!valid) {
+        if (!user || !valid) {
             throw unauthorized('Invalid email or password');
         }
 
@@ -266,20 +276,36 @@ router.post('/refresh', authLimiter, async (req: Request, res: Response, next: N
             throw unauthorized('Token tenant mismatch — please sign in again');
         }
 
-        // Rotate: revoke old token, issue new pair
-        await revokeRefreshToken(refreshToken);
-
-        const payload: AuthPayload = {
+        // FIX 1 — CODEX-WARN-002: Atomic token rotation via $transaction
+        const oldTokenHash = hashToken(refreshToken);
+        const newPayload: AuthPayload = {
             id: user.id,
             tenantId: user.tenantId,
             role: user.role as Role,
         };
 
-        const newAccessToken = signAccessToken(payload);
-        const newRefreshToken = signRefreshToken(payload);
+        const newAccessToken = signAccessToken(newPayload);
+        const newRefreshToken = signRefreshToken(newPayload);
 
-        // Store the new refresh token
-        await storeRefreshToken(newRefreshToken, user.id, user.tenantId);
+        const expiresAt = new Date();
+        expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXPIRY_DAYS);
+
+        await prisma.$transaction(async (tx) => {
+            // Revoke old token
+            await tx.refreshToken.updateMany({
+                where: { token: oldTokenHash, revokedAt: null },
+                data: { revokedAt: new Date() },
+            });
+            // Store new token
+            await tx.refreshToken.create({
+                data: {
+                    token: hashToken(newRefreshToken),
+                    userId: user.id,
+                    tenantId: user.tenantId,
+                    expiresAt,
+                },
+            });
+        });
 
         // FIX 11: Set new refresh token as httpOnly cookie
         setRefreshCookie(res, newRefreshToken);
@@ -322,7 +348,7 @@ router.post('/logout', async (req: Request, res: Response, next: NextFunction) =
 // FIX 5: Delete expired refresh tokens every 24 hours
 const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-setInterval(async () => {
+export const cleanupInterval = setInterval(async () => {
     try {
         const cutoff = new Date();
         cutoff.setDate(cutoff.getDate() - 1); // 1 day past expiry
@@ -336,5 +362,6 @@ setInterval(async () => {
         logger.error({ err }, 'Refresh token cleanup failed');
     }
 }, CLEANUP_INTERVAL_MS);
+cleanupInterval.unref(); // Don't keep process alive just for cleanup
 
 export default router;

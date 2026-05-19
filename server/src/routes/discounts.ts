@@ -48,7 +48,7 @@ router.post(
 
             if (discount.type === 'percent') {
                 // discountAmount = order.totalAmount * (discountPercentage / 100)
-                discountAmount = order.totalAmount.times(discountValue.dividedBy(100));
+                discountAmount = order.totalAmount.times(discountValue.dividedBy(100)).toDecimalPlaces(2);
             } else {
                 discountAmount = discountValue;
             }
@@ -58,7 +58,7 @@ router.post(
                 discountAmount = order.totalAmount;
             }
 
-            const newTotal = order.totalAmount.minus(discountAmount);
+            const newTotal = order.totalAmount.minus(discountAmount).toDecimalPlaces(2);
 
             // Update order total
             const updated = await prisma.order.update({

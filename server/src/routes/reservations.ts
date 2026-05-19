@@ -8,14 +8,19 @@ import {
     updateReservationSchema,
     checkinReservationSchema,
 } from '../validators/reservation';
+import { getTenantId } from '../lib/tenant';
 import { Role, ReservationStatus } from '@mumo/types';
 
-const router = Router();
+// ══════════════════════════════════════════════════════════════════════════════
+// PUBLIC ROUTER — read-only, safe endpoints for guest-facing pages
+// FIX 2 — CODEX-CRIT-002: No auth required, but returns LIMITED fields only
+// ══════════════════════════════════════════════════════════════════════════════
+export const publicReservationRouter = Router();
 
-// ── public/lookup (Guest Facing) ──────────────────────────────────────────────
-router.post('/lookup', async (req: Request, res: Response, next: NextFunction) => {
+// ── Public: Lookup reservation (Guest Facing) ────────────────────────────────
+publicReservationRouter.post('/lookup', async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const tenantId = req.headers['x-tenant-id'] as string;
+        const tenantId = getTenantId(req);
         const { id, guestName } = req.body;
 
         const where: LooseValue = { tenantId };
@@ -25,7 +30,14 @@ router.post('/lookup', async (req: Request, res: Response, next: NextFunction) =
 
         const reservation = await prisma.reservation.findFirst({
             where,
-            include: { table: true },
+            select: {
+                id: true,
+                guestName: true,
+                startTime: true,
+                endTime: true,
+                status: true,
+                guestCount: true,
+            },
         });
 
         if (!reservation) throw notFound('Reservation not found');
@@ -35,47 +47,39 @@ router.post('/lookup', async (req: Request, res: Response, next: NextFunction) =
     }
 });
 
-// ── public/checkin (Guest Facing) ─────────────────────────────────────────────
-router.post('/:id/checkin', async (req: Request, res: Response, next: NextFunction) => {
+// ── Public: Get reservation by ID (Guest Facing) ────────────────────────────
+// FIX 2: Returns limited fields only — never internal fields like tableId, tenantId
+publicReservationRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
-        const tenantId = req.headers['x-tenant-id'] as string;
-        const { id } = req.params;
-
+        const tenantId = getTenantId(req);
         const reservation = await prisma.reservation.findFirst({
-            where: { id, tenantId },
-            include: { table: true }
+            where: { id: req.params.id, tenantId },
+            select: {
+                id: true,
+                guestName: true,
+                startTime: true,
+                endTime: true,
+                status: true,
+                guestCount: true,
+            },
         });
-
         if (!reservation) throw notFound('Reservation not found');
-        if (reservation.status === ReservationStatus.SEATED) throw badRequest('Guest is already seated');
-
-        // Use transaction for atomic check-in
-        const updated = await prisma.$transaction(async (tx) => {
-            const upd = await tx.reservation.update({
-                where: { id },
-                data: { status: ReservationStatus.SEATED },
-                include: { table: true }
-            });
-
-            if (upd.tableId) {
-                await tx.table.update({
-                    where: { id: upd.tableId },
-                    data: { isOccupied: true }
-                });
-            }
-            return upd;
-        });
-
-        res.json(updated);
+        res.json(reservation);
     } catch (err) {
         next(err);
     }
 });
 
 
+// ══════════════════════════════════════════════════════════════════════════════
+// STAFF ROUTER — requires authenticate middleware (mounted in index.ts)
+// FIX 2 — CODEX-CRIT-002: All mutations and sensitive reads require auth
+// ══════════════════════════════════════════════════════════════════════════════
+export const staffReservationRouter = Router();
+
 // ── GET /api/reservations/waitlist ───────────────────────────────────────────
 // Must be before /:id to avoid path conflict
-router.get('/waitlist', async (req: Request, res: Response, next: NextFunction) => {
+staffReservationRouter.get('/waitlist', async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { tenantId } = req.user!;
         const waitlist = await prisma.reservation.findMany({
@@ -94,10 +98,14 @@ router.get('/waitlist', async (req: Request, res: Response, next: NextFunction) 
 });
 
 // ── GET /api/reservations ───────────────────────────────────────────────────
-router.get('/', async (req: Request, res: Response, next: NextFunction) => {
+// FIX 4 — CODEX-WARN-012: Paginated list endpoint
+staffReservationRouter.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { tenantId } = req.user!;
         const { date, status } = req.query;
+        const page = Math.max(1, Number(req.query.page) || 1);
+        const limit = Math.min(100, Number(req.query.limit) || 50);
+        const skip = (page - 1) * limit;
 
         const where: Record<string, unknown> = { tenantId };
 
@@ -112,19 +120,31 @@ router.get('/', async (req: Request, res: Response, next: NextFunction) => {
             where.startTime = { gte: dayStart, lt: dayEnd };
         }
 
-        const reservations = await prisma.reservation.findMany({
-            where,
-            include: { table: { select: { id: true, number: true, capacity: true } } },
-            orderBy: { startTime: 'asc' },
+        const [reservations, total] = await Promise.all([
+            prisma.reservation.findMany({
+                where,
+                include: { table: { select: { id: true, number: true, capacity: true } } },
+                orderBy: { startTime: 'asc' },
+                skip,
+                take: limit,
+            }),
+            prisma.reservation.count({ where }),
+        ]);
+
+        res.json({
+            data: reservations,
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
         });
-        res.json(reservations);
     } catch (err) {
         next(err);
     }
 });
 
 // ── GET /api/reservations/:id ───────────────────────────────────────────────
-router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
+staffReservationRouter.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
     try {
         const { tenantId } = req.user!;
         const reservation = await prisma.reservation.findFirst({
@@ -139,13 +159,13 @@ router.get('/:id', async (req: Request, res: Response, next: NextFunction) => {
 });
 
 // ── POST /api/reservations ──────────────────────────────────────────────────
-router.post(
+staffReservationRouter.post(
     '/',
     validate(createReservationSchema),
     async (req: Request, res: Response, next: NextFunction) => {
         try {
             const { tenantId } = req.user!;
-            const { tableId, ...rest } = req.body;
+            const { tableId } = req.body;
 
             // Validate table belongs to tenant if provided
             if (tableId) {
@@ -155,13 +175,18 @@ router.post(
                 if (!table) throw notFound('Table not found in this tenant');
             }
 
+            // FIX 3 — CODEX-WARN-004: Explicit field mapping (no mass assignment)
             const reservation = await prisma.reservation.create({
                 data: {
                     tenantId,
                     tableId: tableId || null,
-                    ...rest,
-                    startTime: new Date(rest.startTime),
-                    endTime: rest.endTime ? new Date(rest.endTime) : null,
+                    guestName: req.body.guestName,
+                    guestPhone: req.body.guestPhone,
+                    guestEmail: req.body.guestEmail,
+                    guestCount: req.body.guestCount,
+                    notes: req.body.notes,
+                    startTime: new Date(req.body.startTime),
+                    endTime: req.body.endTime ? new Date(req.body.endTime) : null,
                     status: ReservationStatus.PENDING,
                 },
                 include: { table: true },
@@ -175,7 +200,7 @@ router.post(
 );
 
 // ── PUT /api/reservations/:id ───────────────────────────────────────────────
-router.put(
+staffReservationRouter.put(
     '/:id',
     validate(updateReservationSchema),
     async (req: Request, res: Response, next: NextFunction) => {
@@ -195,13 +220,20 @@ router.put(
                 if (!table) throw notFound('Table not found in this tenant');
             }
 
-            const data: Record<string, unknown> = { ...req.body };
-            if (data.startTime) data.startTime = new Date(data.startTime as string);
-            if (data.endTime) data.endTime = new Date(data.endTime as string);
-
+            // FIX 3 — CODEX-WARN-004: Explicit field mapping (no mass assignment)
             const updated = await prisma.reservation.update({
                 where: { id: req.params.id },
-                data,
+                data: {
+                    tableId: req.body.tableId,
+                    guestName: req.body.guestName,
+                    guestPhone: req.body.guestPhone,
+                    guestEmail: req.body.guestEmail,
+                    guestCount: req.body.guestCount,
+                    notes: req.body.notes,
+                    status: req.body.status,
+                    startTime: req.body.startTime ? new Date(req.body.startTime) : undefined,
+                    endTime: req.body.endTime ? new Date(req.body.endTime) : undefined,
+                },
                 include: { table: true },
             });
             res.json(updated);
@@ -212,7 +244,7 @@ router.put(
 );
 
 // ── DELETE /api/reservations/:id ────────────────────────────────────────────
-router.delete(
+staffReservationRouter.delete(
     '/:id',
     requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
     async (req: Request, res: Response, next: NextFunction) => {
@@ -236,8 +268,10 @@ router.delete(
 );
 
 // ── POST /api/reservations/:id/checkin ──────────────────────────────────────
-router.post(
+// FIX 2 — CODEX-CRIT-002: Check-in requires authentication + staff role
+staffReservationRouter.post(
     '/:id/checkin',
+    requireRole(Role.MANAGER, Role.STAFF, Role.TENANT_ADMIN),
     validate(checkinReservationSchema),
     async (req: Request, res: Response, next: NextFunction) => {
         try {
@@ -279,5 +313,3 @@ router.post(
         }
     }
 );
-
-export default router;

@@ -49,15 +49,18 @@ const CHART_THEME = {
 const ReportsPage: React.FC = () => {
     const [timeframe, setTimeframe] = useState('7d');
 
-    const { data: payments, isLoading: paymentsLoading } = useQuery({
+    const { data: paymentsResponse, isLoading: paymentsLoading } = useQuery({
         queryKey: ['payments'],
-        queryFn: paymentService.getAll,
+        queryFn: () => paymentService.getAll(),
     });
 
-    const { data: orders, isLoading: ordersLoading } = useQuery({
+    const { data: ordersResponse, isLoading: ordersLoading } = useQuery({
         queryKey: ['orders'],
-        queryFn: orderService.getAll,
+        queryFn: () => orderService.getAll(),
     });
+
+    const payments = paymentsResponse?.data;
+    const orders = ordersResponse?.data;
 
     const stats = useMemo(() => {
         if (!payments || !orders) return { 

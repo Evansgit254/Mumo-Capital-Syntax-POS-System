@@ -17,134 +17,63 @@ const router = Router();
 router.get(
     '/',
     requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
+    // FIX 4 — CODEX-WARN-012: Paginated list endpoint
     async (req: Request, res: Response, next: NextFunction) => {
         try {
             const { tenantId } = req.user!;
             const { alert } = req.query;
+            const page = Math.max(1, Number(req.query.page) || 1);
+            const limit = Math.min(100, Number(req.query.limit) || 50);
+            const skip = (page - 1) * limit;
 
-            let items = await prisma.inventoryItem.findMany({
-                where: { tenantId },
-                orderBy: { name: 'asc' },
-            });
-
+            // If filtering by alert, we need to fetch all and filter in memory
+            // because Prisma doesn't support comparing two columns directly
             if (alert === 'true') {
-                items = items.filter(item => item.currentStock.lt(item.minStock));
+                const allItems = await prisma.inventoryItem.findMany({
+                    where: { tenantId, deletedAt: null },
+                    orderBy: { name: 'asc' },
+                });
+                const alertItems = allItems.filter(item => item.currentStock.lt(item.minStock));
+                const total = alertItems.length;
+                const paginated = alertItems.slice(skip, skip + limit);
+
+                return res.json({
+                    data: paginated.map(item => ({
+                        ...item,
+                        currentStock: item.currentStock.toNumber(),
+                        minStock: item.minStock.toNumber(),
+                        costPerUnit: item.costPerUnit.toNumber()
+                    })),
+                    total,
+                    page,
+                    limit,
+                    totalPages: Math.ceil(total / limit),
+                });
             }
 
-            res.json(items.map(item => ({
-                ...item,
-                currentStock: item.currentStock.toNumber(),
-                minStock: item.minStock.toNumber(),
-                costPerUnit: item.costPerUnit.toNumber()
-            })));
-        } catch (err) {
-            next(err);
-        }
-    }
-);
+            const where = { tenantId, deletedAt: null };
+            const [items, total] = await Promise.all([
+                prisma.inventoryItem.findMany({
+                    where,
+                    orderBy: { name: 'asc' },
+                    skip,
+                    take: limit,
+                }),
+                prisma.inventoryItem.count({ where }),
+            ]);
 
-// ── GET /api/inventory/:id ──────────────────────────────────────────────────
-router.get(
-    '/:id',
-    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
-    async (req: Request, res: Response, next: NextFunction) => {
-        try {
-            const { tenantId } = req.user!;
-            const item = await prisma.inventoryItem.findFirst({
-                where: { id: req.params.id, tenantId },
-            });
-            if (!item) throw notFound('Inventory item not found');
             res.json({
-                ...item,
-                currentStock: item.currentStock.toNumber(),
-                minStock: item.minStock.toNumber(),
-                costPerUnit: item.costPerUnit.toNumber()
+                data: items.map(item => ({
+                    ...item,
+                    currentStock: item.currentStock.toNumber(),
+                    minStock: item.minStock.toNumber(),
+                    costPerUnit: item.costPerUnit.toNumber()
+                })),
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
             });
-        } catch (err) {
-            next(err);
-        }
-    }
-);
-
-// ── POST /api/inventory ─────────────────────────────────────────────────────
-router.post(
-    '/',
-    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
-    validate(createInventoryItemSchema),
-    async (req: Request, res: Response, next: NextFunction) => {
-        try {
-            const { tenantId } = req.user!;
-            const item = await prisma.inventoryItem.create({
-                data: {
-                    ...req.body,
-                    tenantId,
-                    currentStock: new Prisma.Decimal(req.body.currentStock || 0),
-                    minStock: new Prisma.Decimal(req.body.minStock || 0),
-                    costPerUnit: new Prisma.Decimal(req.body.costPerUnit || 0),
-                },
-            });
-            res.status(201).json({
-                ...item,
-                currentStock: item.currentStock.toNumber(),
-                minStock: item.minStock.toNumber(),
-                costPerUnit: item.costPerUnit.toNumber()
-            });
-        } catch (err) {
-            next(err);
-        }
-    }
-);
-
-// ── PUT /api/inventory/:id ──────────────────────────────────────────────────
-router.put(
-    '/:id',
-    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
-    validate(updateInventoryItemSchema),
-    async (req: Request, res: Response, next: NextFunction) => {
-        try {
-            const { tenantId } = req.user!;
-
-            const existing = await prisma.inventoryItem.findFirst({
-                where: { id: req.params.id, tenantId },
-            });
-            if (!existing) throw notFound('Inventory item not found');
-
-            const updated = await prisma.inventoryItem.update({
-                where: { id: req.params.id },
-                data: {
-                    ...req.body,
-                    currentStock: req.body.currentStock !== undefined ? new Prisma.Decimal(req.body.currentStock) : undefined,
-                    minStock: req.body.minStock !== undefined ? new Prisma.Decimal(req.body.minStock) : undefined,
-                    costPerUnit: req.body.costPerUnit !== undefined ? new Prisma.Decimal(req.body.costPerUnit) : undefined,
-                },
-            });
-            res.json({
-                ...updated,
-                currentStock: updated.currentStock.toNumber(),
-                minStock: updated.minStock.toNumber(),
-                costPerUnit: updated.costPerUnit.toNumber()
-            });
-        } catch (err) {
-            next(err);
-        }
-    }
-);
-
-// ── DELETE /api/inventory/:id ───────────────────────────────────────────────
-router.delete(
-    '/:id',
-    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN),
-    async (req: Request, res: Response, next: NextFunction) => {
-        try {
-            const { tenantId } = req.user!;
-
-            const existing = await prisma.inventoryItem.findFirst({
-                where: { id: req.params.id, tenantId },
-            });
-            if (!existing) throw notFound('Inventory item not found');
-
-            await prisma.inventoryItem.delete({ where: { id: req.params.id } });
-            res.status(204).send();
         } catch (err) {
             next(err);
         }
@@ -152,6 +81,7 @@ router.delete(
 );
 
 // ── GET /api/inventory/audit-log ────────────────────────────────────────────
+// FIX 6 — CODEX-WARN-009: Must be before /:id to avoid being shadowed
 router.get(
     '/audit-log',
     requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
@@ -190,6 +120,127 @@ router.get(
     }
 );
 
+// ── GET /api/inventory/:id ──────────────────────────────────────────────────
+router.get(
+    '/:id',
+    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
+    async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const { tenantId } = req.user!;
+            const item = await prisma.inventoryItem.findFirst({
+                where: { id: req.params.id, tenantId, deletedAt: null },
+            });
+            if (!item) throw notFound('Inventory item not found');
+            res.json({
+                ...item,
+                currentStock: item.currentStock.toNumber(),
+                minStock: item.minStock.toNumber(),
+                costPerUnit: item.costPerUnit.toNumber()
+            });
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+// ── POST /api/inventory ─────────────────────────────────────────────────────
+router.post(
+    '/',
+    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
+    validate(createInventoryItemSchema),
+    async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const { tenantId } = req.user!;
+            // FIX 3 — CODEX-WARN-004: Explicit field mapping (no mass assignment)
+            const item = await prisma.inventoryItem.create({
+                data: {
+                    tenantId,
+                    name: req.body.name,
+                    sku: req.body.sku,
+                    unit: req.body.unit,
+                    supplierId: req.body.supplierId,
+                    currentStock: new Prisma.Decimal(req.body.currentStock || 0),
+                    minStock: new Prisma.Decimal(req.body.minStock || 0),
+                    costPerUnit: new Prisma.Decimal(req.body.costPerUnit || 0),
+                },
+            });
+            res.status(201).json({
+                ...item,
+                currentStock: item.currentStock.toNumber(),
+                minStock: item.minStock.toNumber(),
+                costPerUnit: item.costPerUnit.toNumber()
+            });
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+// ── PUT /api/inventory/:id ──────────────────────────────────────────────────
+router.put(
+    '/:id',
+    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
+    validate(updateInventoryItemSchema),
+    async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const { tenantId } = req.user!;
+
+            const existing = await prisma.inventoryItem.findFirst({
+                where: { id: req.params.id, tenantId, deletedAt: null },
+            });
+            if (!existing) throw notFound('Inventory item not found');
+
+            // FIX 3 — CODEX-WARN-004: Explicit field mapping (no mass assignment)
+            const updated = await prisma.inventoryItem.update({
+                where: { id: req.params.id },
+                data: {
+                    name: req.body.name,
+                    sku: req.body.sku,
+                    unit: req.body.unit,
+                    supplierId: req.body.supplierId,
+                    currentStock: req.body.currentStock !== undefined ? new Prisma.Decimal(req.body.currentStock) : undefined,
+                    minStock: req.body.minStock !== undefined ? new Prisma.Decimal(req.body.minStock) : undefined,
+                    costPerUnit: req.body.costPerUnit !== undefined ? new Prisma.Decimal(req.body.costPerUnit) : undefined,
+                },
+            });
+            res.json({
+                ...updated,
+                currentStock: updated.currentStock.toNumber(),
+                minStock: updated.minStock.toNumber(),
+                costPerUnit: updated.costPerUnit.toNumber()
+            });
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+// ── DELETE /api/inventory/:id ───────────────────────────────────────────────
+// Soft delete to avoid Restrict errors from PO/audit relations
+router.delete(
+    '/:id',
+    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN),
+    async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const { tenantId } = req.user!;
+
+            const existing = await prisma.inventoryItem.findFirst({
+                where: { id: req.params.id, tenantId, deletedAt: null },
+            });
+            if (!existing) throw notFound('Inventory item not found');
+
+            // Soft delete instead of hard delete
+            await prisma.inventoryItem.update({
+                where: { id: req.params.id },
+                data: { deletedAt: new Date() },
+            });
+            res.status(204).send();
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
 // ── POST /api/inventory/:id/adjust ──────────────────────────────────────────
 router.post(
     '/:id/adjust',
@@ -201,7 +252,7 @@ router.post(
             const { adjustmentType, quantity, reason } = req.body;
 
             const item = await prisma.inventoryItem.findFirst({
-                where: { id: req.params.id, tenantId },
+                where: { id: req.params.id, tenantId, deletedAt: null },
             });
             if (!item) throw notFound('Inventory item not found');
 

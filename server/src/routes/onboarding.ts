@@ -22,14 +22,16 @@ const applyLimiter = rateLimit({
 });
 
 const applySchema = z.object({
-  organizationName: z.string().min(2).max(100),
+  organizationName: z.string().min(2).max(100).trim(),
   domain: z.string()
     .min(3).max(30)
     .regex(/^[a-z0-9-]+$/,
-      'Only lowercase letters, numbers, and hyphens'),
-  adminFirstName: z.string().min(1),
-  adminLastName: z.string().min(1),
-  adminEmail: z.string().email(),
+      'Only lowercase letters, numbers, and hyphens')
+    .trim()
+    .toLowerCase(),
+  adminFirstName: z.string().min(1).trim(),
+  adminLastName: z.string().min(1).trim(),
+  adminEmail: z.string().email().toLowerCase().trim(),
   adminPhone: z.string().optional(),
   propertyType: z.enum([
     'HOTEL', 'RESORT', 'RESTAURANT', 'BAR', 'CAFE'
@@ -37,7 +39,7 @@ const applySchema = z.object({
   propertySize: z.enum([
     'SMALL', 'MEDIUM', 'LARGE', 'ENTERPRISE'
   ]),
-  country: z.string().min(2),
+  country: z.string().min(2).trim(),
   message: z.string().max(500).optional(),
 });
 

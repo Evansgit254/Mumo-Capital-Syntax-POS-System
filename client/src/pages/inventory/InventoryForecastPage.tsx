@@ -22,23 +22,25 @@ const InventoryForecastPage: React.FC = () => {
         queryFn: () => orderService.getAll(),
     });
 
-    // Fetch current inventory
-    const { data: inventory, isLoading: itemsLoading } = useQuery({
+    const { data: inventoryResponse, isLoading: itemsLoading } = useQuery({
         queryKey: ['inventory'],
-        queryFn: inventoryService.getAll,
+        queryFn: () => inventoryService.getAll(),
     });
+
+    const inventory = inventoryResponse?.data;
+    const ordersData = orders?.data;
 
     const isLoading = ordersLoading || itemsLoading;
 
     const forecastingData = useMemo(() => {
-        if (!inventory || !orders) return [];
+        if (!inventory || !ordersData) return [];
 
         const thirtyDaysAgo = new Date();
         thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
         return inventory.map(item => {
             // Sum quantities consumed per item in last 30 days (order line items only)
-            const itemUsage = orders
+            const itemUsage = ordersData
                 .filter(order => new Date(order.createdAt) >= thirtyDaysAgo)
                 .reduce((total, order) => {
                     const lineItem = order.items?.find((i: LooseValue) => i.menuItemId === item.id);
@@ -57,7 +59,7 @@ const InventoryForecastPage: React.FC = () => {
                 totalConsumed: itemUsage,
             };
         });
-    }, [inventory, orders]);
+    }, [inventory, ordersData]);
 
     const criticalItems = forecastingData.filter(i => i.daysRemaining <= 3);
 

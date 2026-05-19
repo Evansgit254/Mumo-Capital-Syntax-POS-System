@@ -72,7 +72,7 @@ model PurchaseOrderItem {
   receivedQty     Decimal?      @db.Decimal(10, 2)
   unitCost        Decimal       @db.Decimal(10, 2)
   createdAt       DateTime      @default(now())
-  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
   purchaseOrder   PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
 
   @@index([purchaseOrderId])
@@ -89,7 +89,7 @@ model InventoryAuditLog {
   reason          String?
   userId          String?
   createdAt       DateTime      @default(now())
-  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id])
+  inventoryItem   InventoryItem @relation(fields: [inventoryItemId], references: [id], onDelete: Restrict)
   tenant          Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
@@ -99,7 +99,7 @@ model InventoryAuditLog {
 model User {
   id            String         @id @default(uuid())
   tenantId      String
-  email         String         @unique
+  email         String
   password      String
   firstName     String
   lastName      String
@@ -146,6 +146,7 @@ model MenuItem {
   tenant      Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   orderItems  OrderItem[]
 
+  @@unique([tenantId, name])
   @@index([tenantId])
 }
 
@@ -166,6 +167,9 @@ model Order {
 
   @@index([tenantId])
   @@index([tenantId, status])
+  @@index([tableId])
+  @@index([userId])
+  @@index([createdAt])
 }
 
 model OrderItem {
@@ -177,6 +181,9 @@ model OrderItem {
   subtotal   Decimal  @db.Decimal(10, 2)
   menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
   order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([menuItemId])
 }
 
 model Table {
@@ -212,6 +219,8 @@ model Payment {
 
   @@index([tenantId])
   @@index([tenantId, createdAt])
+  @@index([orderId])
+  @@index([createdAt])
 }
 
 model Reservation {
@@ -234,6 +243,7 @@ model Reservation {
   @@index([tenantId])
   @@index([tenantId, status])
   @@index([tenantId, startTime])
+  @@index([tableId])
 }
 
 model Customer {
@@ -265,6 +275,7 @@ model InventoryItem {
   supplierId         String?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
+  deletedAt          DateTime?
   inventoryAuditLogs InventoryAuditLog[]
   tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   purchaseOrderItems PurchaseOrderItem[]
@@ -352,6 +363,7 @@ model ActivityBooking {
   tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
+  @@index([activityId])
 }
 
 model Shift {
@@ -366,8 +378,11 @@ model Shift {
   tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, date, startTime])
   @@index([tenantId])
   @@index([tenantId, date])
+  @@index([userId])
+  @@index([date])
 }
 
 model ClockEvent {
@@ -381,6 +396,7 @@ model ClockEvent {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
+  @@index([userId])
 }
 
 model TenantApplication {

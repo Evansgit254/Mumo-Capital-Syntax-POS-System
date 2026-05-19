@@ -21,29 +21,45 @@ const SALT_ROUNDS = 12;
 router.get(
     '/',
     requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN),
+    // FIX 4 — CODEX-WARN-012: Paginated list endpoint
     async (req: Request, res: Response, next: NextFunction) => {
         try {
             const { tenantId } = req.user!;
+            const page = Math.max(1, Number(req.query.page) || 1);
+            const limit = Math.min(100, Number(req.query.limit) || 50);
+            const skip = (page - 1) * limit;
 
-            const users = await prisma.user.findMany({
-                where: { tenantId },
-                select: {
-                    id: true,
-                    email: true,
-                    firstName: true,
-                    lastName: true,
-                    role: true,
-                    hourlyRate: true,
-                    createdAt: true,
-                    updatedAt: true,
-                },
-                orderBy: { createdAt: 'desc' },
+            const where = { tenantId };
+            const [users, total] = await Promise.all([
+                prisma.user.findMany({
+                    where,
+                    select: {
+                        id: true,
+                        email: true,
+                        firstName: true,
+                        lastName: true,
+                        role: true,
+                        hourlyRate: true,
+                        createdAt: true,
+                        updatedAt: true,
+                    },
+                    orderBy: { createdAt: 'desc' },
+                    skip,
+                    take: limit,
+                }),
+                prisma.user.count({ where }),
+            ]);
+
+            res.json({
+                data: users.map(u => ({
+                    ...u,
+                    hourlyRate: u.hourlyRate.toNumber()
+                })),
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
             });
-
-            res.json(users.map(u => ({
-                ...u,
-                hourlyRate: u.hourlyRate.toNumber()
-            })));
         } catch (err) {
             next(err);
         }
@@ -61,10 +77,12 @@ router.post(
             const { tenantId } = req.user!;
             const { email, firstName, lastName, password, hourlyRate } = req.body;
 
-            // Check if user already exists
-            const existing = await prisma.user.findUnique({ where: { email } });
+            // FIX 5 — CODEX-CRIT-005: Check uniqueness within tenant scope
+            const existing = await prisma.user.findFirst({
+                where: { email: email.toLowerCase().trim(), tenantId }
+            });
             if (existing) {
-                throw forbidden('A user with this email already exists');
+                throw forbidden('A user with this email already exists in this tenant');
             }
 
             const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
@@ -150,6 +168,7 @@ router.put(
 // ── PUT /api/users/:id/status ───────────────────────────────────────────────
 // Activate or deactivate a user. ADMIN only.
 // An admin cannot deactivate their own account.
+// FIX 8 — CODEX-CRIT-008: User deactivation revokes all refresh tokens
 router.put(
     '/:id/status',
     requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN),
@@ -174,20 +193,33 @@ router.put(
                 throw notFound('User not found in this tenant');
             }
 
-            const updated = await prisma.user.update({
-                where: { id },
-                data: { status },
-                select: {
-                    id: true,
-                    email: true,
-                    firstName: true,
-                    lastName: true,
-                    role: true,
-                    status: true,
-                    hourlyRate: true,
-                    createdAt: true,
-                    updatedAt: true,
-                },
+            // FIX 8: Wrap in transaction — update status + revoke tokens atomically
+            const updated = await prisma.$transaction(async (tx) => {
+                const updatedUser = await tx.user.update({
+                    where: { id },
+                    data: { status },
+                    select: {
+                        id: true,
+                        email: true,
+                        firstName: true,
+                        lastName: true,
+                        role: true,
+                        status: true,
+                        hourlyRate: true,
+                        createdAt: true,
+                        updatedAt: true,
+                    },
+                });
+
+                // Revoke all active refresh tokens when deactivating
+                if (status === 'INACTIVE') {
+                    await tx.refreshToken.updateMany({
+                        where: { userId: id, revokedAt: null },
+                        data: { revokedAt: new Date() },
+                    });
+                }
+
+                return updatedUser;
             });
 
             res.json({
