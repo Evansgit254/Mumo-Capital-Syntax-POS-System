@@ -48,6 +48,7 @@ export interface MenuItem {
 
 export enum OrderStatus {
     PENDING = 'PENDING',
+    PAID = 'PAID',
     PREPARING = 'PREPARING',
     READY = 'READY',
     SERVED = 'SERVED',

@@ -5,7 +5,7 @@ import { notFound, badRequest } from '../lib/errors';
 import { validate } from '../middleware/validate';
 import { requireRole } from '../middleware/requireRole';
 import { createFolioPaymentSchema, createPaymentSchema, updatePaymentStatusSchema } from '../validators/payment';
-import { Role, PaymentStatus } from '@mumo/types';
+import { Role, PaymentStatus, OrderStatus } from '@mumo/types';
 
 const router = Router();
 
@@ -183,7 +183,7 @@ router.post(
                 // Mark order as PAID
                 await tx.order.updateMany({
                     where: { id: orderId, tenantId },
-                    data: { status: 'PAID' },
+                    data: { status: OrderStatus.PAID },
                 });
 
                 // Release table only if all orders for that table are paid
@@ -244,7 +244,7 @@ router.put(
                 if (newStatus === PaymentStatus.COMPLETED && existing.order) {
                     await tx.order.updateMany({
                         where: { id: existing.orderId, tenantId },
-                        data: { status: 'PAID' },
+                        data: { status: OrderStatus.PAID },
                     });
 
                     if (existing.order.tableId) {

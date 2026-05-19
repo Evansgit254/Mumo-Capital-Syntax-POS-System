@@ -237,7 +237,7 @@ function OrderCard({
 
             {/* Actions */}
             <div className="pt-4 border-t border-outline-variant flex gap-2">
-                {order.status === OrderStatus.PENDING && (
+                {(order.status === OrderStatus.PENDING || order.status === OrderStatus.PAID) && (
                     <button 
                         onClick={() => onUpdateStatus(OrderStatus.PREPARING)}
                         className="flex-1 h-12 bg-tertiary text-on-tertiary rounded-xl label-sm flex items-center justify-center gap-2 hover:brightness-110"

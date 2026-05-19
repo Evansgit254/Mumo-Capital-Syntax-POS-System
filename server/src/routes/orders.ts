@@ -132,6 +132,7 @@ router.get('/live', async (req: Request, res: Response, next: NextFunction) => {
         const { tenantId } = req.user!;
         const activeStatuses = [
             OrderStatus.PENDING,
+            OrderStatus.PAID,
             OrderStatus.PREPARING,
             OrderStatus.READY,
         ];
