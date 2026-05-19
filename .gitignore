@@ -8,3 +8,6 @@ client/dist
 server/dist
 .gemini
 .agents
+env_vars.txt
+login_res.json
+*.log
