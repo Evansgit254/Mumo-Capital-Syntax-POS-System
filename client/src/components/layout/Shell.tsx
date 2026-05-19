@@ -94,6 +94,13 @@ export default function Shell() {
                     )}
                 </div>
 
+                <button 
+                    onClick={() => setSidebarOpen(!sidebarOpen)}
+                    className="hidden tablet:flex absolute top-6 -right-4 h-8 w-8 bg-surface-container-high border border-outline-variant rounded-full items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors z-50 shadow-lg"
+                >
+                    <ChevronRight className={cn("transition-transform", sidebarOpen && "rotate-180")} size={16} />
+                </button>
+
                 {/* Nav */}
                 <nav className="flex-1 py-6 px-3 space-y-1 overflow-y-auto">
                     {NAV_ITEMS.map((item) => {
@@ -164,13 +171,6 @@ export default function Shell() {
                     >
                         <LogOut size={20} className="shrink-0" />
                         {sidebarOpen && <span className="label-sm font-bold tracking-widest">Sign Out</span>}
-                    </button>
-                    
-                    <button 
-                        onClick={() => setSidebarOpen(!sidebarOpen)}
-                        className="hidden tablet:flex absolute top-6 -right-4 h-8 w-8 bg-surface-container-high border border-outline-variant rounded-full items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors z-50 shadow-lg"
-                    >
-                        <ChevronRight className={cn("transition-transform", sidebarOpen && "rotate-180")} size={16} />
                     </button>
                 </div>
             </aside>
