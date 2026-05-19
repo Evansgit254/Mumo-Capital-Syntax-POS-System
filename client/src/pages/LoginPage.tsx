@@ -1,20 +1,46 @@
 /// <reference types="vite/client" />
-import { useState, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { authService, getErrorMessage } from '../api/service';
-import { Loader2, CheckCircle2, Eye, EyeOff, FileText } from 'lucide-react';
+import { Loader2, CheckCircle2, Eye, EyeOff, FileText, Globe } from 'lucide-react';
 import FormField from '../components/ui/FormField';
+import { resolveTenant, ResolvedTenant } from '../lib/resolveTenant';
 
 export default function LoginPage() {
     const setSession = useStore((state) => state.setSession);
+    const setTenantId = useStore((state) => state.guest.setTenantId);
     const navigate = useNavigate();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [workspace, setWorkspace] = useState('');
+    const [resolvedTenant, setResolvedTenant] = useState<ResolvedTenant | null>(null);
+    const [isResolving, setIsResolving] = useState(true);
+    const [resolutionError, setResolutionError] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [showPassword, setShowPassword] = useState(false);
+
+    useEffect(() => {
+        handleResolution();
+    }, []);
+
+    const handleResolution = async (manualWorkspace?: string) => {
+        setIsResolving(true);
+        setResolutionError(null);
+        try {
+            const tenant = await resolveTenant(manualWorkspace);
+            setResolvedTenant(tenant);
+            setTenantId(tenant.tenantId);
+        } catch (err: any) {
+            setResolutionError(err.message);
+            setResolvedTenant(null);
+            setTenantId(null);
+        } finally {
+            setIsResolving(false);
+        }
+    };
 
     const handleSubmit = async (e: FormEvent) => {
         e.preventDefault();
@@ -110,11 +136,48 @@ export default function LoginPage() {
                     </div>
 
                     <div className="mb-10">
-                        <h2 className="headline-md text-on-surface mb-2">Welcome back</h2>
-                        <p className="body-md text-on-surface-variant">Sign in to your workspace</p>
+                        <h2 className="headline-md text-on-surface mb-1">Welcome back</h2>
+                        {isResolving ? (
+                            <div className="flex items-center gap-2 text-secondary animate-pulse">
+                                <Loader2 size={14} className="animate-spin" />
+                                <span className="text-[12px] font-bold tracking-wider uppercase">Identifying Workspace...</span>
+                            </div>
+                        ) : resolvedTenant ? (
+                            <div className="flex items-center gap-2 text-secondary">
+                                <Globe size={14} />
+                                <span className="text-[12px] font-bold tracking-wider uppercase">{resolvedTenant.tenantName}</span>
+                            </div>
+                        ) : (
+                            <p className="body-md text-on-surface-variant">Sign in to your workspace</p>
+                        )}
                     </div>
 
                     <form onSubmit={handleSubmit} className="space-y-6">
+                        {!resolvedTenant && !isResolving && (
+                             <FormField 
+                                label="Workspace / Property ID"
+                                error={resolutionError || undefined}
+                            >
+                                <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        required
+                                        value={workspace}
+                                        onChange={(e) => setWorkspace(e.target.value.toLowerCase().trim())}
+                                        className="input-field"
+                                        placeholder="e.g. grand-horizon"
+                                    />
+                                    <button 
+                                        type="button"
+                                        disabled={!workspace}
+                                        onClick={() => handleResolution(workspace)}
+                                        className="btn-secondary whitespace-nowrap !py-0 !px-4"
+                                    >
+                                        Verify
+                                    </button>
+                                </div>
+                            </FormField>
+                        )}
                         <FormField 
                             label="Email Address"
                             error={error && error.includes('email') ? error : undefined}

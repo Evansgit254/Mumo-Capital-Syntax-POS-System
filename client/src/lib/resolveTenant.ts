@@ -23,29 +23,40 @@ if (!API_URL) throw new Error(
   'FATAL: VITE_API_URL is not set. Check your .env file.'
 );
 
-export async function resolveTenant(): Promise<ResolvedTenant> {
-    if (cachedTenant) {
+export async function resolveTenant(forcedSubdomain?: string): Promise<ResolvedTenant> {
+    if (cachedTenant && !forcedSubdomain) {
         return cachedTenant;
     }
 
-    if (resolvePromise) {
+    if (resolvePromise && !forcedSubdomain) {
         return resolvePromise;
     }
 
     // Extract subdomain
     const hostname = window.location.hostname;
-    // Localhost fallback for development
-    let subdomain = 'grand-horizon'; 
+    let subdomain = forcedSubdomain || 'grand-horizon'; 
     
-    if (hostname !== 'localhost' && hostname !== '127.0.0.1') {
+    if (!forcedSubdomain && hostname !== 'localhost' && hostname !== '127.0.0.1') {
         const parts = hostname.split('.');
-        // Assuming format like: grand-horizon.domain.com
-        if (parts.length >= 2) {
+        // Handle Railway: tenant.mumo-app-production.up.railway.app
+        // parts = [tenant, mumo-app-production, up, railway, app]
+        if (parts.length > 4) {
+            subdomain = parts[0];
+        } else if (parts.length === 4) {
+            // base domain: mumo-app-production.up.railway.app
+            // parts = [mumo-app-production, up, railway, app]
+            // We should NOT default to mumo-app-production, but let the UI handle the failure
+            subdomain = ''; 
+        } else if (parts.length >= 2) {
             subdomain = parts[0];
         }
     }
 
-    resolvePromise = axios.get<{tenantId: string; tenantName: string; displayName?: string; settings?: LooseValue}>(
+    if (!subdomain) {
+        throw new TenantResolutionError('No workspace identified. Please specify your property ID.');
+    }
+
+    resolvePromise = axios.get<ResolvedTenant>(
         `${API_URL}/api/public/tenants/resolve`,
         { params: { subdomain } }
     ).then(response => {
@@ -53,9 +64,9 @@ export async function resolveTenant(): Promise<ResolvedTenant> {
         return response.data;
     }).catch(error => {
         if (error.response?.status === 404) {
-            throw new TenantResolutionError('Tenant not found for this subdomain.');
+            throw new TenantResolutionError(`Workspace "${subdomain}" not found.`);
         }
-        throw new TenantResolutionError('Failed to resolve tenant.');
+        throw new TenantResolutionError('Failed to connect to the hotel system.');
     }).finally(() => {
         resolvePromise = null;
     });
