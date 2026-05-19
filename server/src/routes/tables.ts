@@ -9,46 +9,46 @@ import { Role } from '@mumo/types';
 
 const router = Router();
 
-// ── GET /public (Guest Facing) ───────────────────────────────────────────────
+// ── GET / ──────────────────────────────────────────────────────────────────
+// Returns tables for the current tenant.
+// Staff Context (req.user): Returns paginated results with data/total structure.
+// Guest Context (header): Returns flat array for backward compatibility.
+// FIX 4 — CODEX-WARN-012: Unified paginated/non-paginated endpoint
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
         const tenantId = getTenantId(req);
+        
+        // If authenticated (Staff UI), return paginated
+        if (req.user) {
+            const page = Math.max(1, Number(req.query.page) || 1);
+            const limit = Math.min(100, Number(req.query.limit) || 50);
+            const skip = (page - 1) * limit;
+
+            const [tables, total] = await Promise.all([
+                prisma.table.findMany({
+                    where: { tenantId },
+                    orderBy: { number: 'asc' },
+                    skip,
+                    take: limit,
+                }),
+                prisma.table.count({ where: { tenantId } }),
+            ]);
+
+            return res.json({
+                data: tables,
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+            });
+        }
+
+        // Guest Flow / Legacy: Return raw array
         const tables = await prisma.table.findMany({
             where: { tenantId },
             orderBy: { number: 'asc' },
         });
         res.json(tables);
-    } catch (err) {
-        next(err);
-    }
-});
-
-// ── GET /api/tables ──────────────────────────────────────────────────────────
-// FIX 4 — CODEX-WARN-012: Paginated list endpoint
-router.get('/', async (req: Request, res: Response, next: NextFunction) => {
-    try {
-        const { tenantId } = req.user!;
-        const page = Math.max(1, Number(req.query.page) || 1);
-        const limit = Math.min(100, Number(req.query.limit) || 50);
-        const skip = (page - 1) * limit;
-
-        const [tables, total] = await Promise.all([
-            prisma.table.findMany({
-                where: { tenantId },
-                orderBy: { number: 'asc' },
-                skip,
-                take: limit,
-            }),
-            prisma.table.count({ where: { tenantId } }),
-        ]);
-
-        res.json({
-            data: tables,
-            total,
-            page,
-            limit,
-            totalPages: Math.ceil(total / limit),
-        });
     } catch (err) {
         next(err);
     }

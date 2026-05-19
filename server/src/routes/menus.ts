@@ -10,46 +10,46 @@ import { Role } from '@mumo/types';
 
 const router = Router();
 
-// ── GET /public (Guest Facing) ───────────────────────────────────────────────
+// ── GET / ──────────────────────────────────────────────────────────────────
+// Returns menu items for the current tenant.
+// Staff Context (req.user): Returns paginated results with data/total structure.
+// Guest Context (header): Returns flat array of available items only.
+// FIX 4 — CODEX-WARN-012: Unified paginated/non-paginated endpoint
 router.get('/', async (req: Request, res: Response, next: NextFunction) => {
     try {
         const tenantId = getTenantId(req);
+
+        // Staff Context: Return all items, paginated
+        if (req.user) {
+            const page = Math.max(1, Number(req.query.page) || 1);
+            const limit = Math.min(100, Number(req.query.limit) || 50);
+            const skip = (page - 1) * limit;
+
+            const [items, total] = await Promise.all([
+                prisma.menuItem.findMany({
+                    where: { tenantId },
+                    orderBy: { name: 'asc' },
+                    skip,
+                    take: limit,
+                }),
+                prisma.menuItem.count({ where: { tenantId } }),
+            ]);
+
+            return res.json({
+                data: items.map(item => ({ ...item, price: item.price.toNumber() })),
+                total,
+                page,
+                limit,
+                totalPages: Math.ceil(total / limit),
+            });
+        }
+
+        // Guest Flow: Return raw array of available items only
         const items = await prisma.menuItem.findMany({
             where: { tenantId, isAvailable: true },
             orderBy: { name: 'asc' },
         });
         res.json(items.map(item => ({ ...item, price: item.price.toNumber() })));
-    } catch (err) {
-        next(err);
-    }
-});
-
-// ── GET /api/menus ───────────────────────────────────────────────────────────
-// FIX 4 — CODEX-WARN-012: Paginated list endpoint
-router.get('/', async (req: Request, res: Response, next: NextFunction) => {
-    try {
-        const { tenantId } = req.user!;
-        const page = Math.max(1, Number(req.query.page) || 1);
-        const limit = Math.min(100, Number(req.query.limit) || 50);
-        const skip = (page - 1) * limit;
-
-        const [items, total] = await Promise.all([
-            prisma.menuItem.findMany({
-                where: { tenantId },
-                orderBy: { name: 'asc' },
-                skip,
-                take: limit,
-            }),
-            prisma.menuItem.count({ where: { tenantId } }),
-        ]);
-
-        res.json({
-            data: items.map(item => ({ ...item, price: item.price.toNumber() })),
-            total,
-            page,
-            limit,
-            totalPages: Math.ceil(total / limit),
-        });
     } catch (err) {
         next(err);
     }

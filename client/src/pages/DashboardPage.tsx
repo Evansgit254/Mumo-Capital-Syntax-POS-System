@@ -36,6 +36,12 @@ export default function DashboardPage() {
     const currency = settingsQuery.data?.currency || 'KES';
     
     // Queries
+    const activeOrdersQuery = useQuery({
+        queryKey: ['orders-live'],
+        queryFn: () => orderService.getLive(),
+        refetchInterval: 15000, // Frequent polling for live dashboard feel
+    });
+
     const ordersQuery = useQuery({
         queryKey: ['orders'],
         queryFn: () => orderService.getAll(),
@@ -132,279 +138,225 @@ export default function DashboardPage() {
 
     return (
         <div className="p-6 tablet:p-10 space-y-10">
-            {/* Greeting */}
-            <div className="flex flex-col gap-1">
-                <h1 className="display-lg text-on-surface">Good Day, {session.firstName}</h1>
-                <p className="body-lg text-on-surface-variant">Here's what's happening at <span className="text-secondary font-bold">{session.tenantName}</span> today.</p>
+            {/* ── Stats Overview ─────────────────────────────────────────── */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+                <StatCard 
+                    title="Today's Revenue" 
+                    value={`${totalRevenue.toLocaleString()} ${currency}`}
+                    trend={revenueTrend}
+                    trendUp={totalRevenue >= yesterdayRevenue}
+                    icon={<TrendingUp size={24} />}
+                    color="bg-secondary"
+                />
+                <StatCard 
+                    title="Active Orders" 
+                    value={activeOrdersQuery.data?.length || 0}
+                    trend={`${pendingOrdersCount} pending kitchen`}
+                    icon={<ShoppingCart size={24} />}
+                    color="bg-primary"
+                />
+                <StatCard 
+                    title="Occupancy" 
+                    value={`${occupancyData.occupied}/${occupancyData.total}`}
+                    trend={`${occupancyData.reserved} reserved today`}
+                    icon={<MapIcon size={24} />}
+                    color="bg-tertiary"
+                />
+                <StatCard 
+                    title="Staff Active" 
+                    value={activeStaff}
+                    trend="In workplace now"
+                    icon={<Users size={24} />}
+                    color="bg-surface-container-highest"
+                />
             </div>
 
-            {/* Stats Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {isLoading ? (
-                    Array(4).fill(0).map((_, i) => <Skeleton key={i} className="h-32 w-full rounded-2xl" />)
-                ) : (
-                    <>
-                        <StatCard 
-                            title="Today's Revenue" 
-                            value={`${totalRevenue.toLocaleString()} ${currency}`} 
-                            icon={TrendingUp} 
-                            trend={revenueTrend}
-                            color="bg-secondary/10 text-secondary"
-                        />
-                        <StatCard 
-                            title="Active Orders" 
-                            value={pendingOrdersCount.toString()} 
-                            icon={Clock} 
-                            trend={avgPrepTime}
-                            color="bg-tertiary/10 text-tertiary"
-                        />
-                        <StatCard 
-                            title="Table Occupancy" 
-                            value={`${occupancyData.occupied}/${occupancyData.total}`} 
-                            icon={Utensils} 
-                            trend={`${Math.round((occupancyData.occupied / (occupancyData.total || 1)) * 100)}% capacity`}
-                            color="bg-primary/10 text-on-surface"
-                        />
-                        <StatCard 
-                            title="Staff Active" 
-                            value={activeStaff.toString()} 
-                            icon={Users} 
-                            trend={`${activeStaff} staff members active`}
-                            color="bg-surface-container-highest text-on-surface-variant"
-                        />
-                    </>
-                )}
-            </div>
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-10">
+                {/* ── Active Kitchen Orders ──────────────────────────────────── */}
+                <div className="xl:col-span-2 space-y-6">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                            <div className="h-10 w-10 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-500">
+                                <Clock size={20} />
+                            </div>
+                            <h2 className="headline-md">Live Kitchen Status</h2>
+                        </div>
+                        <button 
+                            onClick={() => navigate('/kds')}
+                            className="flex items-center gap-2 text-sm font-bold text-secondary hover:underline"
+                        >
+                            Open KDS <ArrowRight size={16} />
+                        </button>
+                    </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-10">
-                {/* Left: Recent Orders & Alerts */}
-                <div className="lg:col-span-2 space-y-10">
-                    {/* Recent Orders */}
-                    <section className="space-y-6">
-                        <div className="flex items-center justify-between">
-                            <h2 className="headline-md">Recent Orders</h2>
-                            <button onClick={() => navigate('/reports')} className="flex items-center gap-2 text-secondary label-sm hover:underline">
-                                View All <ArrowRight size={14} />
-                            </button>
-                        </div>
-
-                        <div className="space-y-4">
-                            {isLoading ? (
-                                Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)
-                            ) : todayOrders.length === 0 ? (
-                                <div className="card-default flex flex-col items-center justify-center py-12 text-on-surface-variant/40">
-                                    <AlertCircle size={48} className="mb-4 opacity-20" />
-                                    <p className="body-lg">No orders yet today.</p>
-                                </div>
-                            ) : (
-                                todayOrders.slice(0, 5).map((order) => (
-                                    <div key={order.id} className="card-interactive flex items-center justify-between p-4 px-6 hover:bg-surface-container-high transition-all">
-                                        <div className="flex items-center gap-4">
-                                            <div className="h-12 w-12 bg-surface-container-highest rounded-full flex items-center justify-center text-secondary">
-                                                <ShoppingCart size={24} />
-                                            </div>
-                                            <div>
-                                                <h3 className="body-md font-bold text-on-surface">Order #{order.id.slice(-4).toUpperCase()}</h3>
-                                                <p className="body-sm text-on-surface-variant">Table {(order as any).table?.number || 'Takeaway'}</p>
-                                            </div>
-                                        </div>
-                                        <div className="flex flex-col items-end gap-2">
-                                            <span className="body-md font-bold text-secondary">{order.totalAmount.toLocaleString()} {currency}</span>
-                                            <span className={cn(
-                                                "pill-status",
-                                                order.status === OrderStatus.PENDING && "bg-tertiary/10 text-tertiary border border-tertiary/20",
-                                                order.status === OrderStatus.READY && "bg-secondary/10 text-secondary border border-secondary/20",
-                                                order.status === OrderStatus.SERVED && "bg-surface-container-highest text-on-surface-variant"
-                                            )}>
-                                                {order.status}
-                                            </span>
-                                        </div>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    </section>
-
-                    {/* Inventory Alerts Card */}
-                    <section className="space-y-6">
-                        <div className="flex items-center justify-between">
-                            <h2 className="headline-md">Inventory Alerts</h2>
-                            <button onClick={() => navigate('/menu')} className="flex items-center gap-2 text-secondary label-sm hover:underline">
-                                Management <ArrowRight size={14} />
-                            </button>
-                        </div>
-                        <div className="card-default p-0 overflow-hidden">
-                            {isLoading ? (
-                                <Skeleton className="h-40 w-full" />
-                            ) : !inventoryAlertsQuery.data?.data || inventoryAlertsQuery.data.data.length === 0 ? (
-                                <div className="p-10 flex flex-col items-center justify-center text-center">
-                                    <div className="h-16 w-16 rounded-full bg-secondary/10 flex items-center justify-center text-secondary mb-4">
-                                        <CheckCircle2 size={32} />
-                                    </div>
-                                    <h3 className="body-lg font-bold text-on-surface">All stock levels healthy</h3>
-                                    <p className="text-sm text-on-surface-variant">Everything is currently above reorder thresholds.</p>
-                                </div>
-                            ) : (
-                                <div className="divide-y divide-outline-variant/30">
-                                    {inventoryAlertsQuery.data.data.map((item: InventoryItem) => (
-                                        <div key={item.id} className="p-5 flex items-center justify-between hover:bg-white/5 transition-colors">
-                                            <div className="flex items-center gap-4">
-                                                <div className="h-10 w-10 rounded-lg bg-red-500/10 flex items-center justify-center text-red-500">
-                                                    <Package size={20} />
-                                                </div>
-                                                <div>
-                                                    <h4 className="body-md font-bold text-on-surface">{item.name}</h4>
-                                                    <p className="text-xs text-on-surface-variant uppercase tracking-widest">Threshold: {item.minStock} {item.unit}</p>
-                                                </div>
-                                            </div>
-                                            <div className="text-right">
-                                                <div className="body-md font-black text-red-400">{item.currentStock} {item.unit}</div>
-                                                <p className="text-[10px] text-red-500/60 font-bold uppercase">CRITICAL</p>
-                                            </div>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    </section>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {activeOrdersQuery.isLoading ? (
+                            Array(4).fill(0).map((_, i) => <Skeleton key={i} className="h-[120px] rounded-3xl" />)
+                        ) : activeOrdersQuery.data?.length === 0 ? (
+                            <div className="col-span-2">
+                                <EmptyState 
+                                    icon={<Utensils size={40} />}
+                                    title="No active orders"
+                                    description="When orders are sent to the kitchen, they will appear here."
+                                />
+                            </div>
+                        ) : (
+                            activeOrdersQuery.data?.slice(0, 4).map(order => (
+                                <OrderMiniCard key={order.id} order={order} />
+                            ))
+                        )}
+                    </div>
                 </div>
 
-                {/* Right: Occupancy Chart & Reservations */}
-                <div className="space-y-10">
-                    {/* Live Occupancy Chart */}
-                    <section className="space-y-6">
-                        <h2 className="headline-md">Occupancy</h2>
-                        <div className="card-default p-8 flex flex-col items-center text-center space-y-6">
-                            <div className="relative h-48 w-48 flex items-center justify-center">
-                                {/* Simple SVG Donut */}
-                                <svg className="h-full w-full -rotate-90 transform" viewBox="0 0 100 100">
-                                    <circle cx="50" cy="50" r="40" fill="transparent" stroke="currentColor" strokeWidth="8" className="text-surface-container-highest" />
-                                    
-                                    {/* Occupied Slice */}
-                                    <circle 
-                                        cx="50" cy="50" r="40" fill="transparent" stroke="currentColor" strokeWidth="10" 
-                                        strokeDasharray={`${(occupancyData.occupied / (occupancyData.total || 1)) * 251.2} 251.2`} 
-                                        className="text-secondary transition-all duration-1000" 
-                                    />
-                                    
-                                    {/* Reserved Slice (Offset by occupied) */}
-                                    <circle 
-                                        cx="50" cy="50" r="40" fill="transparent" stroke="currentColor" strokeWidth="10" 
-                                        strokeDasharray={`${(occupancyData.reserved / (occupancyData.total || 1)) * 251.2} 251.2`} 
-                                        strokeDashoffset={-((occupancyData.occupied / (occupancyData.total || 1)) * 251.2)}
-                                        className="text-tertiary transition-all duration-1000" 
-                                    />
-                                </svg>
-                                <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                    <span className="display-sm font-black text-on-surface">{Math.round((occupancyData.occupied / (occupancyData.total || 1)) * 100)}%</span>
-                                    <span className="label-sm text-on-surface-variant">Occupied</span>
-                                </div>
+                {/* ── Inventory Alerts ─────────────────────────────────────── */}
+                <div className="space-y-6">
+                    <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-xl bg-red-500/10 flex items-center justify-center text-red-500">
+                            <AlertCircle size={20} />
+                        </div>
+                        <h2 className="headline-md">Stock Alerts</h2>
+                    </div>
+
+                    <div className="space-y-3">
+                        {inventoryAlertsQuery.isLoading ? (
+                            Array(3).fill(0).map((_, i) => <Skeleton key={i} className="h-[80px] rounded-2xl" />)
+                        ) : inventoryAlertsQuery.data?.data?.length === 0 ? (
+                            <div className="p-8 rounded-3xl bg-surface-container-lowest border border-outline-variant/30 text-center">
+                                <CheckCircle2 size={32} className="mx-auto mb-3 text-green-500/30" />
+                                <p className="body-sm text-on-surface-variant/60">Inventory is healthy</p>
                             </div>
+                        ) : (
+                            inventoryAlertsQuery.data?.data?.slice(0, 3).map(item => (
+                                <InventoryAlertCard key={item.id} item={item} />
+                            ))
+                        )}
+                        {inventoryAlertsQuery.data?.data && inventoryAlertsQuery.data.data.length > 3 && (
+                            <button 
+                                onClick={() => navigate('/inventory')}
+                                className="w-full py-3 text-sm font-bold text-on-surface-variant hover:text-secondary transition-colors"
+                            >
+                                View all {inventoryAlertsQuery.data.data.length} alerts
+                            </button>
+                        )}
+                    </div>
+                </div>
+            </div>
 
-                            <div className="grid grid-cols-3 w-full gap-2">
-                                <OccupancyLegend label="Active" count={occupancyData.occupied} color="bg-secondary" />
-                                <OccupancyLegend label="Reserved" count={occupancyData.reserved} color="bg-tertiary" />
-                                <OccupancyLegend label="Free" count={occupancyData.available} color="bg-surface-container-highest" />
-                            </div>
-                        </div>
-                    </section>
-
-                    {/* Upcoming Reservations */}
-                    <section className="space-y-6">
-                        <div className="flex items-center justify-between">
-                            <h2 className="headline-md">Reservations</h2>
-                            <button onClick={() => navigate('/reservations')} className="text-secondary label-sm hover:underline">Today</button>
-                        </div>
-                        <div className="space-y-3">
-                            {isLoading ? (
-                                Array(2).fill(0).map((_, i) => <Skeleton key={i} className="h-24 w-full rounded-2xl" />)
-                            ) : !reservationsQuery.data?.data || reservationsQuery.data.data.length === 0 ? (
-                                <div className="p-8 bg-surface-container/30 rounded-3xl border border-dashed border-outline-variant text-center space-y-2">
-                                    <div className="h-10 w-10 bg-surface-container-highest rounded-full flex items-center justify-center mx-auto text-on-surface-variant/40">
-                                        <Calendar size={20} />
-                                    </div>
-                                    <p className="body-sm text-on-surface-variant font-medium">No reservations today</p>
-                                </div>
-                            ) : (
-                                reservationsQuery.data.data.slice(0, 5).map((res: LooseValue) => (
-                                    <div key={res.id} className="card-default !p-4 flex items-center gap-4 hover:border-secondary/40 transition-colors">
-                                        <div className="h-12 w-12 rounded-xl bg-surface-container-high flex flex-col items-center justify-center shrink-0 border border-outline-variant/30">
-                                            <span className="text-[10px] font-bold text-secondary uppercase -mb-1">
-                                                {new Date(res.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }).split(':')[0]}
-                                            </span>
-                                            <span className="text-[10px] font-black text-on-surface opacity-40">
-                                            {new Date(res.startTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false }).split(':')[1]}
-                                            </span>
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <h4 className="body-sm font-bold text-on-surface truncate">{res.guestName}</h4>
-                                            <p className="text-[11px] text-on-surface-variant flex items-center gap-1.5">
-                                                <Users size={10} className="shrink-0" /> {res.guestCount} pax 
-                                                <span className="opacity-20">|</span> 
-                                                <MapIcon size={10} className="shrink-0" /> Table {res.table?.number || 'TBD'}
-                                            </p>
-                                        </div>
-                                        <ChevronRight size={16} className="text-on-surface-variant/20" />
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    </section>
-
-                    {/* Quick Actions */}
-                    <section className="space-y-4">
-                        <h2 className="headline-md">Quick Actions</h2>
-                        <div className="grid grid-cols-1 gap-4">
-                            <QuickActionBtn label="New POS Order" icon={ShoppingCart} onClick={() => navigate('/pos')} color="bg-secondary" />
-                            <QuickActionBtn label="Manage Tables" icon={MapIcon} onClick={() => navigate('/tables')} color="bg-surface-container-highest" />
-                        </div>
-                    </section>
+            {/* ── Quick Actions ───────────────────────────────────────────── */}
+            <div className="pt-6 border-t border-outline-variant">
+                <h2 className="headline-md mb-6">Quick Operations</h2>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <QuickActionBtn 
+                        icon={<ShoppingCart />} 
+                        label="Point of Sale" 
+                        onClick={() => navigate('/pos')}
+                        desc="Create orders"
+                    />
+                    <QuickActionBtn 
+                        icon={<MapIcon />} 
+                        label="Table Map" 
+                        onClick={() => navigate('/tables')}
+                        desc="Manage floor"
+                    />
+                    <QuickActionBtn 
+                        icon={<Package />} 
+                        label="Inventory" 
+                        onClick={() => navigate('/inventory')}
+                        desc="Stock & supply"
+                    />
+                    <QuickActionBtn 
+                        icon={<Settings />} 
+                        label="Settings" 
+                        onClick={() => navigate('/settings')}
+                        desc="App config"
+                    />
                 </div>
             </div>
         </div>
     );
 }
 
-function StatCard({ title, value, icon: Icon, trend, color }: LooseValue) {
+function StatCard({ title, value, trend, trendUp, icon, color }: any) {
     return (
-        <div className="card-default space-y-4 bg-surface-container-low/50 hover:bg-surface-container-low transition-all">
-            <div className="flex items-center justify-between">
-                <div className={cn("h-12 w-12 rounded-xl flex items-center justify-center", color)}>
-                    <Icon size={24} />
+        <div className="group rounded-[32px] bg-surface-container-low border border-outline-variant/50 p-7 hover:bg-surface-container transition-all hover:shadow-xl hover:shadow-secondary/5">
+            <div className="flex items-start justify-between mb-6">
+                <div className={cn("h-14 w-14 rounded-2xl flex items-center justify-center text-white shadow-lg", color)}>
+                    {icon}
                 </div>
-                <span className="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant/60">{title}</span>
+                <div className={cn(
+                    "px-3 py-1 rounded-full text-[11px] font-bold uppercase tracking-wider",
+                    trendUp ? "bg-green-500/10 text-green-500" : "bg-on-surface-variant/10 text-on-surface-variant"
+                )}>
+                    {trendUp ? '↑' : ''} {trend}
+                </div>
             </div>
-            <div className="space-y-1">
-                <h3 className="headline-md !text-[32px] font-bold text-on-surface">{value}</h3>
-                <p className="label-sm !normal-case !font-medium text-on-surface-variant/60">{trend}</p>
+            <p className="text-on-surface-variant/60 font-medium label-md mb-1 uppercase tracking-widest">{title}</p>
+            <h3 className="headline-lg text-on-surface group-hover:scale-[1.02] origin-left transition-transform duration-300">{value}</h3>
+        </div>
+    );
+}
+
+function OrderMiniCard({ order }: { order: any }) {
+    const timeAgo = Math.round((Date.now() - new Date(order.createdAt).getTime()) / 60000);
+    
+    return (
+        <div className="flex gap-4 p-5 rounded-3xl bg-surface-container-lowest border border-outline-variant/30 hover:shadow-md transition-all">
+            <div className="h-12 w-12 rounded-2xl bg-surface-container flex items-center justify-center text-on-surface-variant shrink-0">
+                <Utensils size={20} />
+            </div>
+            <div className="min-w-0 flex-1">
+                <div className="flex items-center justify-between mb-1">
+                    <h4 className="body-md font-bold text-on-surface truncate">
+                        {order.table ? `Table ${order.table.number}` : 'Takeaway'}
+                    </h4>
+                    <span className="text-[10px] font-bold text-on-surface-variant bg-surface-container px-2 py-0.5 rounded-full">
+                        {timeAgo}m ago
+                    </span>
+                </div>
+                <p className="body-sm text-on-surface-variant truncate">
+                    {order.items.length} items • {order.status}
+                </p>
+                <div className="mt-3 w-full bg-surface-container h-1.5 rounded-full overflow-hidden">
+                    <div 
+                        className={cn(
+                            "h-full animate-pulse transition-all duration-1000",
+                            order.status === 'PENDING' ? 'bg-orange-400 w-1/3' : 
+                            order.status === 'PREPARING' ? 'bg-secondary w-2/3' : 'bg-green-500 w-full'
+                        )} 
+                    />
+                </div>
             </div>
         </div>
     );
 }
 
-function QuickActionBtn({ label, icon: Icon, onClick, color }: LooseValue) {
+function InventoryAlertCard({ item }: { item: InventoryItem }) {
+    return (
+        <div className="flex items-center justify-between p-4 rounded-2xl bg-surface-container-lowest border border-outline-variant/30">
+            <div className="min-w-0 flex-1">
+                <h4 className="body-md font-bold text-on-surface truncate">{item.name}</h4>
+                <p className="body-sm text-red-500 font-medium">
+                    Only {item.currentStock} {item.unit} left
+                </p>
+            </div>
+            <div className="ml-4 px-3 py-1 rounded-lg bg-red-500/10 text-red-500 label-xs font-bold whitespace-nowrap">
+                Low Stock
+            </div>
+        </div>
+    );
+}
+
+function QuickActionBtn({ icon, label, onClick, desc }: any) {
     return (
         <button 
             onClick={onClick}
-            className={cn(
-                "flex items-center gap-4 p-5 rounded-2xl transition-all hover:scale-[1.02] active:scale-[0.98] w-full text-left font-semibold",
-                color === 'bg-secondary' ? "bg-secondary text-white shadow-xl shadow-secondary/20" : "bg-surface-container border border-outline-variant text-on-surface"
-            )}
+            className="flex flex-col items-center justify-center p-6 rounded-[2rem] bg-surface-container-low border border-outline-variant/50 hover:bg-secondary hover:text-white transition-all group hover:shadow-2xl hover:shadow-secondary/20 active:scale-95"
         >
-            <Icon size={24} />
-            <span>{label}</span>
-        </button>
-    );
-}
-
-function OccupancyLegend({ label, count, color }: { label: string, count: number, color: string }) {
-    return (
-        <div className="flex flex-col items-center">
-            <div className="flex items-center gap-1.5">
-                <div className={cn("h-1.5 w-1.5 rounded-full", color)} />
-                <span className="text-[10px] font-bold text-on-surface-variant uppercase tracking-tighter">{label}</span>
+            <div className="h-12 w-12 rounded-2xl bg-surface-container-highest flex items-center justify-center text-secondary group-hover:bg-white/20 group-hover:text-white mb-4 transition-colors">
+                {icon}
             </div>
-            <span className="text-sm font-black text-on-surface">{count}</span>
-        </div>
+            <span className="label-md font-bold group-hover:text-white">{label}</span>
+            <span className="text-[10px] opacity-40 group-hover:opacity-100 h-0 group-hover:h-auto overflow-hidden transition-all">{desc}</span>
+        </button>
     );
 }

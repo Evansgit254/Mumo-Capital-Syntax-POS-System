@@ -20,7 +20,7 @@ const SALT_ROUNDS = 12;
 // List all staff accounts for the authenticated tenant. ADMIN only.
 router.get(
     '/',
-    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN),
+    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
     // FIX 4 — CODEX-WARN-012: Paginated list endpoint
     async (req: Request, res: Response, next: NextFunction) => {
         try {
