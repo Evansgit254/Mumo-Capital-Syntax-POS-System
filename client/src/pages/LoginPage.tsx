@@ -245,24 +245,43 @@ export default function LoginPage() {
                         </div>
                     </form>
 
-                    <div className="mt-12 space-y-4 pt-12 border-t border-outline-variant/30">
-                        <p className="body-md text-on-surface-variant/60 text-center">
-                            Don't have an account?{' '}
-                            <span 
-                                className="text-secondary font-semibold cursor-pointer hover:underline underline-offset-4 transition-all"
-                                onClick={() => navigate('/register')}
-                            >
-                                Register your property
-                            </span>
-                        </p>
-                        <div className="flex justify-center">
+                    <div className="mt-12 space-y-6 pt-12 border-t border-outline-variant/30">
+                        {/* New UAT Helper Section */}
+                        <div className="bg-secondary/5 border border-secondary/10 rounded-2xl p-6 space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <div className="flex items-center gap-3">
+                                <FileText className="text-secondary" size={18} />
+                                <h3 className="label-md text-secondary font-black uppercase tracking-widest">UAT Tester Quick Start</h3>
+                            </div>
+                            
+                            <div className="space-y-3">
+                                <div className="p-3 bg-surface/50 rounded-xl border border-outline-variant/20">
+                                    <p className="text-[11px] font-bold text-on-surface-variant/60 uppercase mb-1">Step 1: Verify Workspace</p>
+                                    <p className="body-sm font-medium">Use Workspace ID: <code className="text-secondary font-bold">grand-horizon</code></p>
+                                </div>
+
+                                <div className="p-3 bg-surface/50 rounded-xl border border-outline-variant/20">
+                                    <p className="text-[11px] font-bold text-on-surface-variant/60 uppercase mb-1">Step 2: Authenticate</p>
+                                    <div className="grid grid-cols-2 gap-2 mt-2">
+                                        <div className="space-y-1">
+                                            <p className="text-[10px] text-on-surface-variant">Admin</p>
+                                            <p className="text-[11px] font-bold">admin@grand.com</p>
+                                        </div>
+                                        <div className="space-y-1">
+                                            <p className="text-[10px] text-on-surface-variant">Manager</p>
+                                            <p className="text-[11px] font-bold">manager@grand.com</p>
+                                        </div>
+                                    </div>
+                                    <p className="text-[10px] text-on-surface-variant/60 mt-3 italic border-t border-outline-variant/10 pt-2">Password for all accounts: <span className="font-bold text-on-surface">password123</span></p>
+                                </div>
+                            </div>
+
                             <a 
                                 href="/Mumo_POS_UAT_Manual.docx" 
                                 download 
-                                className="flex items-center gap-2 text-[12px] font-bold text-secondary bg-secondary/5 px-4 py-2 rounded-full hover:bg-secondary/10 transition-all border border-secondary/10"
+                                className="flex items-center justify-center gap-2 w-full py-3 rounded-xl bg-secondary text-white text-[12px] font-black uppercase tracking-tighter hover:brightness-110 transition-all shadow-lg shadow-secondary/20"
                             >
                                 <FileText size={14} />
-                                UAT TESTER? DOWNLOAD MANUAL
+                                Full Documentation (DOCX)
                             </a>
                         </div>
                         <p className="text-[11px] text-center tracking-wider text-on-surface-variant/40 uppercase font-bold">
