@@ -20,7 +20,8 @@ router.get(
     // FIX 4 — CODEX-WARN-012: Paginated list endpoint
     async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const { tenantId } = req.user!;
+            const user = req.user; if (!user) return res.sendStatus(401);
+            const { tenantId } = user;
             const { alert } = req.query;
             const page = Math.max(1, Number(req.query.page) || 1);
             const limit = Math.min(100, Number(req.query.limit) || 50);
@@ -87,7 +88,8 @@ router.get(
     requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
     async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const { tenantId } = req.user!;
+            const user = req.user; if (!user) return res.sendStatus(401);
+            const { tenantId } = user;
             const { page = '1', limit = '10' } = req.query;
             const skip = (Number(page) - 1) * Number(limit);
 
@@ -126,7 +128,8 @@ router.get(
     requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
     async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const { tenantId } = req.user!;
+            const user = req.user; if (!user) return res.sendStatus(401);
+            const { tenantId } = user;
             const item = await prisma.inventoryItem.findFirst({
                 where: { id: req.params.id, tenantId, deletedAt: null },
             });
@@ -150,7 +153,8 @@ router.post(
     validate(createInventoryItemSchema),
     async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const { tenantId } = req.user!;
+            const user = req.user; if (!user) return res.sendStatus(401);
+            const { tenantId } = user;
             // FIX 3 — CODEX-WARN-004: Explicit field mapping (no mass assignment)
             const item = await prisma.inventoryItem.create({
                 data: {
@@ -183,7 +187,8 @@ router.put(
     validate(updateInventoryItemSchema),
     async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const { tenantId } = req.user!;
+            const user = req.user; if (!user) return res.sendStatus(401);
+            const { tenantId } = user;
 
             const existing = await prisma.inventoryItem.findFirst({
                 where: { id: req.params.id, tenantId, deletedAt: null },
@@ -222,7 +227,8 @@ router.delete(
     requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN),
     async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const { tenantId } = req.user!;
+            const user = req.user; if (!user) return res.sendStatus(401);
+            const { tenantId } = user;
 
             const existing = await prisma.inventoryItem.findFirst({
                 where: { id: req.params.id, tenantId, deletedAt: null },
@@ -248,7 +254,8 @@ router.post(
     validate(adjustInventorySchema),
     async (req: Request, res: Response, next: NextFunction) => {
         try {
-            const { tenantId, id: userId } = req.user!;
+            const user = req.user; if (!user) return res.sendStatus(401);
+            const { tenantId, id: userId } = user;
             const { adjustmentType, quantity, reason } = req.body;
 
             const item = await prisma.inventoryItem.findFirst({
