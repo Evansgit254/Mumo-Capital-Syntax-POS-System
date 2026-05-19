@@ -73,7 +73,7 @@ export default function Shell() {
             {/* Desktop Sidebar */}
             <aside 
                 className={cn(
-                    "hidden tablet:flex flex-col bg-surface-container-low border-r border-outline-variant transition-all duration-300 shrink-0 relative",
+                    "hidden tablet:flex flex-col bg-surface-container-low border-r border-outline-variant transition-all duration-300 shrink-0 relative overflow-x-hidden overflow-y-hidden",
                     sidebarOpen ? "w-[280px] min-w-[280px]" : "w-[80px] min-w-[80px]"
                 )}
             >
@@ -108,7 +108,8 @@ export default function Shell() {
                                 <NavLink
                                     to={item.path}
                                     className={({ isActive }) => cn(
-                                        "flex items-center gap-4 px-4 h-[56px] rounded-xl transition-all group relative",
+                                        "flex items-center h-[56px] rounded-xl transition-all group relative",
+                                        sidebarOpen ? "gap-4 px-4" : "justify-center px-0 mx-2",
                                         isActive 
                                             ? "bg-secondary/10 text-secondary" 
                                             : "text-on-surface-variant hover:bg-white/5 hover:text-on-surface"
