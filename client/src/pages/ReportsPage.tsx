@@ -41,8 +41,8 @@ import { formatDate } from '../lib/formatDate';
 
 // Chart theme constants — extracted from inline hex values for maintainability
 const CHART_THEME = {
-    primary: '#008B8B',
-    accent: '#00BFBF',
+    primary: '#6fd7d6',
+    accent: '#6fd7d6',
     text: '#9CA3AF',
     tooltipBg: '#282a2b',
     tooltipText: '#e2e2e2',

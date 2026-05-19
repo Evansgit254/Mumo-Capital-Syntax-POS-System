@@ -8,8 +8,8 @@
   :root {
     /* Brand Accents */
     --color-primary: #c8c6c5;
-    --color-secondary: #008B8B;       /* Action Teal from DESIGN.md override */
-    --color-tertiary: #FFBF00;        /* Alert Amber from DESIGN.md override */
+    --color-secondary: #6fd7d6;       /* Official Stitch Teal */
+    --color-tertiary: #fbbc00;        /* Official Stitch Amber */
     --color-error: #ffb4ab;
 
     /* Surfaces */
@@ -99,15 +99,15 @@
   }
 
   .btn-secondary {
-    @apply h-[56px] px-6 bg-transparent text-[#e0e0e0] font-semibold rounded-lg border border-[#383838] transition-all hover:bg-white/5 active:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2;
+    @apply h-[56px] px-6 bg-transparent text-on-surface font-semibold rounded-lg border border-outline transition-all hover:bg-white/5 active:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2;
   }
 
   .card-default {
-    @apply bg-surface-container rounded-2xl border border-[#383838] p-6 transition-all;
+    @apply bg-surface-container rounded-2xl border border-outline-variant p-6 transition-all;
   }
 
   .card-interactive {
-    @apply card-default hover:bg-[#2c2c2c] cursor-pointer active:scale-[0.98];
+    @apply card-default hover:bg-surface-container-high cursor-pointer active:scale-[0.98];
   }
 
   .card-selected {

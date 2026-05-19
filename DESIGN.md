@@ -27,12 +27,6 @@ The design system evokes **quiet luxury, precision, and effortless service**. Th
 | Alert / Warning | `--tertiary` | `#fbbc00` | Pending, warnings, urgent |
 | Error | `--error` | `#ffb4ab` | Destructive actions, errors |
 
-> Override values used in generation:
-> - Primary override: `#121212`
-> - Secondary override: `#008B8B` (Vibrant Teal)
-> - Tertiary override: `#FFBF00` (Soft Amber)
-> - Neutral override: `#E0E0E0`
-
 ---
 
 ### 2.2 Surface Scale (Dark Mode)
@@ -137,15 +131,15 @@ Base unit: **8px**
 
 | Variant | Background | Text | Height | Border |
 |---|---|---|---|---|
-| Primary | `#008B8B` (Teal) | `#ffffff` | 56px | None |
-| Secondary | Transparent | `#e0e0e0` | 56px | 1px `#383838` |
-| Alert / Warning | `#ffbf00` (Amber) | `#121212` | 56px | None |
+| Primary | `#6fd7d6` (Teal) | `#ffffff` | 56px | None |
+| Secondary | Transparent | `--on-surface` | 56px | 1px `--outline` |
+| Alert / Warning | `#fbbc00` (Amber) | `#313030` | 56px | None |
 | Destructive | `--error-container` | `--on-error-container` | 56px | None |
 
 ### 6.2 Cards
 
-- Background: `--surface-container` (`#1e2020`) default → `#2c2c2c` for interactive cards
-- Border: 1px `#383838` (inactive) → 2px inner teal (`#008B8B`) on selected
+- Background: `--surface-container` default → `--surface-container-high` for interactive cards
+- Border: 1px `--outline-variant` (inactive) → 2px inner teal (`#6fd7d6`) on selected
 - Border radius: `radius-lg` (16px)
 - Padding: `spacing-md` (24px)
 
@@ -199,7 +193,7 @@ No heavy drop shadows. Depth via **tonal surface steps** only:
 | 3 — Modals | `--surface-container-high` | `#282a2b` | Dialogs, drawers |
 | 4 — Overlays | `--surface-container-highest` | `#333535` | Floating overlays |
 
-Boundary lines: 1px `#383838` (inactive) → teal `#008B8B` (active focus).
+Boundary lines: 1px `--outline-variant` (inactive) → teal `#6fd7d6` (active focus).
 
 ---
 
