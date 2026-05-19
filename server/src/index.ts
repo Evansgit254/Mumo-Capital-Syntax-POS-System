@@ -117,8 +117,38 @@ app.use('/api/vendors', authenticate, vendorRoutes);
 // Trigger reload for Prisma client sync
 app.use(errorHandler);
 
+// ── Super Admin Sync ───────────────────────────────────────────────────────
+async function syncSuperAdmin() {
+    const email = process.env.SUPER_ADMIN_EMAIL;
+    const password = process.env.SUPER_ADMIN_PASSWORD;
+
+    if (!email || !password) {
+        logger.info('Skipping Super Admin sync: credentials not provided in environment');
+        return;
+    }
+
+    try {
+        const bcrypt = await import('bcrypt');
+        const hash = await bcrypt.hash(password, 12);
+        
+        await prisma.superAdmin.upsert({
+            where: { email },
+            update: { passwordHash: hash },
+            create: {
+                email,
+                passwordHash: hash,
+                name: 'Super Admin',
+            },
+        });
+        logger.info(`Super Admin synched for: ${email}`);
+    } catch (err) {
+        logger.error({ err }, 'Failed to sync Super Admin');
+    }
+}
+
 // ── Startup ──────────────────────────────────────────────────────────────────
-const server = app.listen(port, () => {
+const server = app.listen(port, async () => {
+    await syncSuperAdmin();
     console.log(`\n🚀 Mumo POS Server running on http://localhost:${port}\n`);
     console.log('Registered routes:');
     console.log('  PUBLIC:');
