@@ -257,6 +257,16 @@ function MenuItemForm({ onClose, onSuccess, initialData, categories }: { onClose
             </div>
             
             <form onSubmit={handleSubmit} className="space-y-6">
+                {mutation.isError && (
+                    <div className="p-4 bg-error/10 border border-error/20 rounded-xl flex items-start gap-3 animate-in shake duration-300">
+                        <AlertCircle className="text-error shrink-0 mt-0.5" size={20} />
+                        <div className="flex-1">
+                            <p className="label-sm text-error font-black uppercase tracking-widest">Action Failed</p>
+                            <p className="body-xs text-error/80 leading-relaxed">{getErrorMessage(mutation.error)}</p>
+                        </div>
+                    </div>
+                )}
+
                 <div className="space-y-2">
                     <label className="label-sm text-on-surface-variant">Item Name</label>
                     <input 

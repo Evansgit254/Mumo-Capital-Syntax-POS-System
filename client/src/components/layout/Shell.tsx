@@ -51,7 +51,7 @@ const NAV_ITEMS = [
     { name: 'Help', path: '/help', icon: HelpCircle },
     { name: 'Permissions', path: '/admin/permissions', icon: Shield, roles: ['TENANT_ADMIN'], separator: true },
     { name: 'Tenant', path: '/admin/tenant', icon: Building2, roles: ['TENANT_ADMIN'] },
-    { name: 'Floor Plan', path: '/admin/tables', icon: Layout, roles: ['TENANT_ADMIN'] },
+    { name: 'Floor Plan', path: '/admin/tables', icon: Layout, roles: ['TENANT_ADMIN', 'MANAGER'] },
     { name: 'Executive Insights', path: '/admin/analytics', icon: LayoutPanelLeft, roles: ['TENANT_ADMIN'] },
 ];
 

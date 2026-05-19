@@ -149,43 +149,36 @@ router.post(
 // ── PUT /api/tables/batch (Floor Plan Save) ───────────────────────────────────
 router.put(
     '/batch',
-    requireRole(Role.TENANT_ADMIN, Role.SUPER_ADMIN),
+    requireRole(Role.TENANT_ADMIN, Role.MANAGER, Role.SUPER_ADMIN),
     validate(batchUpdateTablesSchema),
     async (req: Request, res: Response, next: NextFunction) => {
         try {
             const { tenantId } = req.user!;
             const { tables } = req.body;
 
-            const tableIds = tables.map((t: LooseValue) => t.id);
-
-            // 1. Validate all tables belong to the tenant
-            const existingCount = await prisma.table.count({
-                where: {
-                    id: { in: tableIds },
-                    tenantId
-                }
-            });
-
-            if (existingCount !== tables.length) {
-                return res.status(403).json({ 
-                    error: 'Access denied: Some tables do not belong to your organization.' 
-                });
-            }
-
-            // 2. Execute transaction
-            // FIX 3 — CODEX-WARN-004: Explicit field mapping (no mass assignment)
+            // Execute transaction with upsert to support creating new tables from the floor planner
             const result = await prisma.$transaction(
-                tables.map((t: LooseValue) => {
-                    return prisma.table.update({
+                tables.map((t: any) => {
+                    return prisma.table.upsert({
                         where: { id: t.id },
-                        data: {
+                        update: {
                             number: t.number,
                             capacity: t.capacity,
-                            x: t.x,
-                            y: t.y,
-                            zone: t.zone,
-                            shape: t.shape,
+                            x: t.x || 0,
+                            y: t.y || 0,
+                            zone: t.zone || 'Indoor',
+                            shape: t.shape || 'SQUARE',
                         },
+                        create: {
+                            id: t.id,
+                            tenantId,
+                            number: t.number,
+                            capacity: t.capacity || 2,
+                            x: t.x || 0,
+                            y: t.y || 0,
+                            zone: t.zone || 'Indoor',
+                            shape: t.shape || 'SQUARE',
+                        }
                     });
                 })
             );

@@ -9,7 +9,7 @@ export const createMenuItemSchema = z.object({
     price: z
         .number({ required_error: 'Price is required', invalid_type_error: 'Price must be a number' })
         .positive('Price must be greater than zero'),
-    categoryId: z.string().min(1, 'Category is required').optional(),
+    categoryId: z.string().optional().or(z.literal('')).nullable(),
     isAvailable: z.boolean().optional().default(true),
 });
 

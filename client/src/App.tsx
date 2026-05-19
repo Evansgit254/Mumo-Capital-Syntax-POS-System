@@ -107,7 +107,7 @@ function App() {
                         <Route path="/help" element={<HelpPage />} />
 
                         {/* Admin Routes (TENANT_ADMIN only) */}
-                        <Route element={<ProtectedRoute allowedRoles={[Role.TENANT_ADMIN]} />}>
+                        <Route element={<ProtectedRoute allowedRoles={[Role.TENANT_ADMIN, Role.MANAGER]} />}>
                             <Route path="/admin/permissions" element={<PermissionsPage />} />
                             <Route path="/admin/tenant" element={<TenantPage />} />
                             <Route path="/admin/tables" element={<TableManagementPage />} />
