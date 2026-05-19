@@ -73,8 +73,8 @@ export default function Shell() {
             {/* Desktop Sidebar */}
             <aside 
                 className={cn(
-                    "hidden tablet:flex flex-col bg-surface-container-low border-r border-outline-variant transition-all duration-300",
-                    sidebarOpen ? "w-[280px]" : "w-[80px]"
+                    "hidden tablet:flex flex-col bg-surface-container-low border-r border-outline-variant transition-all duration-300 shrink-0 relative",
+                    sidebarOpen ? "w-[280px] min-w-[280px]" : "w-[80px] min-w-[80px]"
                 )}
             >
                 {/* Header */}
