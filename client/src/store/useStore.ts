@@ -13,7 +13,10 @@ interface Session {
 }
 
 interface CartItem extends Omit<OrderItem, 'id' | 'orderId'> {
-    name: string; // For display
+    cartLineId: string;
+    name: string;
+    modifiers: string[];
+    notes?: string | null;
 }
 
 interface HardwareSettings {
@@ -35,6 +38,7 @@ interface StoreState {
     session: Session;
     setSession: (session: Partial<Session>) => void;
     clearSession: () => void;
+    logout: () => void;
 
     // Super Admin Slice (memory-only)
     superAdmin: SuperAdminSession;
@@ -46,9 +50,9 @@ interface StoreState {
         tableId: string | null;
         items: CartItem[];
         setTableId: (id: string | null) => void;
-        addItem: (item: CartItem) => void;
-        removeItem: (menuItemId: string) => void;
-        updateQuantity: (menuItemId: string, delta: number) => void;
+        addItem: (item: Omit<CartItem, 'cartLineId'>) => void;
+        removeItem: (cartLineId: string) => void;
+        updateQuantity: (cartLineId: string, delta: number) => void;
         clearCart: () => void;
     };
 
@@ -102,6 +106,22 @@ export const useStore = create<StoreState>()(
                     session: { ...defaultSession },
                 }),
 
+            // DEEP-WARN-014: Single logout action that clears everything
+            logout: () =>
+                set((state) => ({
+                    session: { ...defaultSession },
+                    superAdmin: { ...defaultSuperAdmin },
+                    cart: {
+                        ...state.cart,
+                        tableId: null,
+                        items: [],
+                    },
+                    ui: {
+                        ...state.ui,
+                        sidebarOpen: false,
+                    },
+                })),
+
             // Super Admin
             superAdmin: { ...defaultSuperAdmin },
             setSuperAdmin: (updates) =>
@@ -129,15 +149,17 @@ export const useStore = create<StoreState>()(
                     })),
                 addItem: (newItem) =>
                     set((state) => {
-                        const existing = state.cart.items.find(
-                            (i) => i.menuItemId === newItem.menuItemId && i.name === newItem.name
-                        );
+                        const modifierKey = JSON.stringify((newItem.modifiers ?? []).sort());
+                        const cartLineId = `${newItem.menuItemId}__${modifierKey}`;
+
+                        const existing = state.cart.items.find((i) => i.cartLineId === cartLineId);
+
                         if (existing) {
                             return {
                                 cart: {
                                     ...state.cart,
                                     items: state.cart.items.map((i) =>
-                                        i.menuItemId === newItem.menuItemId
+                                        i.cartLineId === cartLineId
                                             ? {
                                                   ...i,
                                                   quantity: i.quantity + newItem.quantity,
@@ -148,27 +170,28 @@ export const useStore = create<StoreState>()(
                                 },
                             };
                         }
+
                         return {
                             cart: {
                                 ...state.cart,
-                                items: [...state.cart.items, newItem],
+                                items: [...state.cart.items, { ...newItem, cartLineId }],
                             },
                         };
                     }),
-                removeItem: (menuItemId) =>
+                removeItem: (cartLineId) =>
                     set((state) => ({
                         cart: {
                             ...state.cart,
-                            items: state.cart.items.filter((i) => i.menuItemId !== menuItemId),
+                            items: state.cart.items.filter((i) => i.cartLineId !== cartLineId),
                         },
                     })),
-                updateQuantity: (menuItemId, delta) =>
+                updateQuantity: (cartLineId, delta) =>
                     set((state) => ({
                         cart: {
                             ...state.cart,
                             items: state.cart.items
                                 .map((i) => {
-                                    if (i.menuItemId === menuItemId) {
+                                    if (i.cartLineId === cartLineId) {
                                         const newQty = Math.max(0, i.quantity + delta);
                                         return {
                                             ...i,

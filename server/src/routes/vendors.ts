@@ -50,24 +50,6 @@ router.get(
     }
 );
 
-// FIX 7 — CODEX-WARN-010: Missing GET /api/vendors/:id
-router.get(
-    '/:id',
-    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
-    async (req: Request, res: Response, next: NextFunction) => {
-        try {
-            const { tenantId } = req.user!;
-            const vendor = await prisma.vendor.findFirst({
-                where: { id: req.params.id, tenantId },
-            });
-            if (!vendor) throw notFound('Vendor not found');
-            res.json(vendor);
-        } catch (err) {
-            next(err);
-        }
-    }
-);
-
 router.post(
     '/',
     requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
@@ -93,56 +75,9 @@ router.post(
     }
 );
 
-router.put(
-    '/:id',
-    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
-    validate(updateVendorSchema),
-    async (req: Request, res: Response, next: NextFunction) => {
-        try {
-            const { tenantId } = req.user!;
-            const existing = await prisma.vendor.findFirst({
-                where: { id: req.params.id, tenantId },
-            });
-            if (!existing) throw notFound('Vendor not found');
-
-            // FIX 3 — CODEX-WARN-004: Explicit field mapping (no mass assignment)
-            const updated = await prisma.vendor.update({
-                where: { id: req.params.id },
-                data: {
-                    name: req.body.name,
-                    contactName: req.body.contactName,
-                    email: req.body.email,
-                    phone: req.body.phone,
-                    categories: req.body.categories,
-                },
-            });
-            res.json(updated);
-        } catch (err) {
-            next(err);
-        }
-    }
-);
-
-router.delete(
-    '/:id',
-    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN),
-    async (req: Request, res: Response, next: NextFunction) => {
-        try {
-            const { tenantId } = req.user!;
-            const existing = await prisma.vendor.findFirst({
-                where: { id: req.params.id, tenantId },
-            });
-            if (!existing) throw notFound('Vendor not found');
-
-            await prisma.vendor.delete({ where: { id: req.params.id } });
-            res.status(204).send();
-        } catch (err) {
-            next(err);
-        }
-    }
-);
-
 // ── PURCHASE ORDERS ──────────────────────────────────────────────────────────
+// DEEP-CRIT-001: All /orders* routes MUST be declared BEFORE /:id routes,
+// otherwise Express treats "orders" as a vendor ID parameter.
 
 router.get(
     '/orders',
@@ -202,7 +137,13 @@ router.post(
         try {
             const { tenantId } = req.user!;
             const { items, vendorId } = req.body;
-            
+
+            // DEEP-CRIT-003: Verify vendor belongs to tenant before creating PO
+            const vendor = await prisma.vendor.findFirst({
+                where: { id: vendorId, tenantId }
+            });
+            if (!vendor) throw notFound('Vendor not found');
+
             // Decimal arithmetic for total cost
             let totalCost = new Prisma.Decimal(0);
             for (const item of items) {
@@ -288,10 +229,11 @@ router.patch(
                     for (const poItem of receivedPoItems) {
                         if (!poItem.receivedQty || poItem.receivedQty.isZero()) continue;
 
-                        const item = await tx.inventoryItem.findUnique({
-                            where: { id: poItem.inventoryItemId }
+                        // DEEP-CRIT-003: Tenant-scoped inventory item lookup
+                        const item = await tx.inventoryItem.findFirst({
+                            where: { id: poItem.inventoryItemId, tenantId, deletedAt: null }
                         });
-                        if (!item) continue;
+                        if (!item) throw notFound(`Inventory item not found: ${poItem.inventoryItemId}`);
 
                         const newQty = item.currentStock.plus(poItem.receivedQty);
 
@@ -329,6 +271,77 @@ router.patch(
                 ...updated,
                 totalCost: updated.totalCost.toNumber()
             });
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+// ── VENDOR DETAIL (/:id) ─────────────────────────────────────────────────────
+// DEEP-CRIT-001: These /:id routes MUST be AFTER all /orders* routes
+// so Express doesn't treat "orders" as a vendor ID.
+
+// FIX 7 — CODEX-WARN-010: Missing GET /api/vendors/:id
+router.get(
+    '/:id',
+    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
+    async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const { tenantId } = req.user!;
+            const vendor = await prisma.vendor.findFirst({
+                where: { id: req.params.id, tenantId },
+            });
+            if (!vendor) throw notFound('Vendor not found');
+            res.json(vendor);
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+router.put(
+    '/:id',
+    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
+    validate(updateVendorSchema),
+    async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const { tenantId } = req.user!;
+            const existing = await prisma.vendor.findFirst({
+                where: { id: req.params.id, tenantId },
+            });
+            if (!existing) throw notFound('Vendor not found');
+
+            // FIX 3 — CODEX-WARN-004: Explicit field mapping (no mass assignment)
+            const updated = await prisma.vendor.update({
+                where: { id: req.params.id },
+                data: {
+                    name: req.body.name,
+                    contactName: req.body.contactName,
+                    email: req.body.email,
+                    phone: req.body.phone,
+                    categories: req.body.categories,
+                },
+            });
+            res.json(updated);
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+router.delete(
+    '/:id',
+    requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN),
+    async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const { tenantId } = req.user!;
+            const existing = await prisma.vendor.findFirst({
+                where: { id: req.params.id, tenantId },
+            });
+            if (!existing) throw notFound('Vendor not found');
+
+            await prisma.vendor.delete({ where: { id: req.params.id } });
+            res.status(204).send();
         } catch (err) {
             next(err);
         }

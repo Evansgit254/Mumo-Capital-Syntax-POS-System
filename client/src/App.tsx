@@ -1,6 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import ProtectedRoute from './routes/ProtectedRoute';
+import SuperAdminRoute from './routes/SuperAdminRoute';
 import Shell from './components/layout/Shell';
 
 // Pages
@@ -59,9 +60,11 @@ function App() {
                 <Route path="/register" element={<RegisterPage />} />
                 <Route path="/register/status/:applicationId" element={<ApplicationStatusPage />} />
 
-                {/* Super Admin Routes (Public login, protected dashboard) */}
+                {/* Super Admin Routes (protected by SuperAdminRoute guard) */}
                 <Route path="/super-admin/login" element={<SuperAdminLoginPage />} />
-                <Route path="/super-admin/applications" element={<SuperAdminApplicationsPage />} />
+                <Route element={<SuperAdminRoute />}>
+                    <Route path="/super-admin/applications" element={<SuperAdminApplicationsPage />} />
+                </Route>
 
                 {/* Protected App Shell */}
                 <Route element={<ProtectedRoute />}>
@@ -83,7 +86,8 @@ function App() {
                             <Route path="/reservations" element={<ReservationsPage />} />
                         </Route>
 
-                        <Route element={<ProtectedRoute allowedRoles={[Role.TENANT_ADMIN, Role.MANAGER, Role.STAFF]} />}>
+                        {/* Guests (DEEP-WARN-018: restrict from STAFF and CASHIER) */}
+                        <Route element={<ProtectedRoute allowedRoles={[Role.TENANT_ADMIN, Role.MANAGER]} />}>
                             <Route path="/guests" element={<GuestDirectoryPage />} />
                             <Route path="/folio/:roomId" element={<GuestFolioPage />} />
                         </Route>
@@ -91,7 +95,10 @@ function App() {
                         <Route path="/menu" element={<MenuManagerPage />} />
                         <Route path="/checkout" element={<CheckoutPage />} />
                         <Route path="/billing" element={<BillingPage />} />
-                        <Route path="/reports" element={<Suspense fallback={<PageSkeleton />}><ReportsPage /></Suspense>} />
+                        {/* DEEP-WARN-017: Reports restricted to MANAGER and TENANT_ADMIN */}
+                        <Route element={<ProtectedRoute allowedRoles={[Role.MANAGER, Role.TENANT_ADMIN]} />}>
+                            <Route path="/reports" element={<Suspense fallback={<PageSkeleton />}><ReportsPage /></Suspense>} />
+                        </Route>
 
                         {/* Inventory (Manager/Admin) */}
                         <Route element={<ProtectedRoute allowedRoles={[Role.TENANT_ADMIN, Role.MANAGER]} />}>
@@ -106,9 +113,11 @@ function App() {
                         <Route path="/settings" element={<SettingsPage />} />
                         <Route path="/help" element={<HelpPage />} />
 
-                        {/* Admin Routes (TENANT_ADMIN only) */}
-                        <Route element={<ProtectedRoute allowedRoles={[Role.TENANT_ADMIN, Role.MANAGER]} />}>
+                        {/* Admin Routes (DEEP-WARN-018: permissions TENANT_ADMIN only, others TENANT_ADMIN+MANAGER) */}
+                        <Route element={<ProtectedRoute allowedRoles={[Role.TENANT_ADMIN]} />}>
                             <Route path="/admin/permissions" element={<PermissionsPage />} />
+                        </Route>
+                        <Route element={<ProtectedRoute allowedRoles={[Role.TENANT_ADMIN, Role.MANAGER]} />}>
                             <Route path="/admin/tenant" element={<TenantPage />} />
                             <Route path="/admin/tables" element={<TableManagementPage />} />
                             <Route path="/admin/analytics" element={<Suspense fallback={<PageSkeleton />}><ExecutiveAnalyticsPage /></Suspense>} />

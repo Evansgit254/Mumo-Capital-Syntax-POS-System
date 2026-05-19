@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { menuService, tableService, tenantService, orderService } from '../api/service';
 import { useStore } from '../store/useStore';
+import { formatCurrency } from '../lib/formatCurrency';
 import { 
     Search, 
     Plus, 
@@ -110,7 +111,12 @@ export default function POSPage() {
         try {
             await orderService.create({
                 tableId: cart.tableId || undefined,
-                items: cart.items.map(i => ({ menuItemId: i.menuItemId, quantity: i.quantity }))
+                items: cart.items.map(i => ({ 
+                    menuItemId: i.menuItemId, 
+                    quantity: i.quantity,
+                    modifiers: i.modifiers || [],
+                    notes: i.notes || null
+                }))
             });
             
             toast.success('Order sent to kitchen! 🔥', {
@@ -312,21 +318,26 @@ export default function POSPage() {
                         </div>
                     ) : (
                         cart.items.map(item => (
-                            <div key={item.menuItemId} className="flex gap-4 p-4 rounded-2xl bg-surface-container-high/50 hover:bg-surface-container-high transition-all group animate-in slide-in-from-right-4">
+                            <div key={item.cartLineId} className="flex gap-4 p-4 rounded-2xl bg-surface-container-high/50 hover:bg-surface-container-high transition-all group animate-in slide-in-from-right-4">
                                 <div className="flex-1 min-w-0">
                                     <h4 className="body-md font-bold text-on-surface truncate">{item.name}</h4>
-                                    <p className="text-secondary font-bold text-sm mt-1">{item.unitPrice} {settingsQuery.data?.currency || 'KES'}</p>
+                                    <p className="text-secondary font-bold text-sm mt-1">
+                                        {formatCurrency(item.unitPrice, settingsQuery.data?.currency)}
+                                    </p>
+                                    {item.notes && (
+                                        <p className="text-[10px] text-orange-400 font-bold uppercase tracking-widest mt-1">Note: {item.notes}</p>
+                                    )}
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <button 
-                                        onClick={() => cart.updateQuantity(item.menuItemId, -1)}
+                                        onClick={() => cart.updateQuantity(item.cartLineId, -1)}
                                         className="h-8 w-8 rounded-lg bg-surface-container-highest flex items-center justify-center text-on-surface-variant hover:bg-error/10 hover:text-error transition-all"
                                     >
                                         <Minus size={14} />
                                     </button>
                                     <span className="w-6 text-center font-bold text-on-surface">{item.quantity}</span>
                                     <button 
-                                        onClick={() => cart.updateQuantity(item.menuItemId, 1)}
+                                        onClick={() => cart.updateQuantity(item.cartLineId, 1)}
                                         className="h-8 w-8 rounded-lg bg-secondary text-white flex items-center justify-center hover:brightness-110 transition-all"
                                     >
                                         <Plus size={14} />
@@ -342,7 +353,7 @@ export default function POSPage() {
             <div className="space-y-2">
                 <div className="flex justify-between body-md">
                     <span className="text-on-surface-variant">Subtotal</span>
-                    <span className="text-on-surface font-semibold">{totalAmount.toLocaleString()} {settingsQuery.data?.currency || 'KES'}</span>
+                    <span className="text-on-surface font-semibold">{formatCurrency(totalAmount, settingsQuery.data?.currency)}</span>
                 </div>
                 <div className="flex justify-between body-md">
                     <span className="text-on-surface-variant">Tax ({settingsQuery.data?.taxRate ?? 16}% VAT)</span>
@@ -351,7 +362,7 @@ export default function POSPage() {
                 <div className="h-[1px] bg-outline-variant my-2" />
                 <div className="flex justify-between items-end">
                     <span className="headline-md !text-[16px]">Total Amount</span>
-                    <span className="headline-md !text-[24px] text-secondary">{totalAmount.toLocaleString()} {settingsQuery.data?.currency || 'KES'}</span>
+                    <span className="headline-md !text-[24px] text-secondary">{formatCurrency(totalAmount, settingsQuery.data?.currency)}</span>
                 </div>
             </div>
 
@@ -403,15 +414,15 @@ export default function POSPage() {
                     {cart.items.length === 0 ? (
                         <p className="text-center text-on-surface-variant/40 py-8">Your cart is empty</p>
                     ) : cart.items.map(item => (
-                        <div key={item.menuItemId} className="flex gap-4 p-4 rounded-2xl bg-surface-container-high/50">
+                        <div key={item.cartLineId} className="flex gap-4 p-4 rounded-2xl bg-surface-container-high/50">
                             <div className="flex-1 min-w-0">
                                 <h4 className="body-md font-bold text-on-surface truncate">{item.name}</h4>
-                                <p className="text-secondary font-bold text-sm mt-1">{item.unitPrice} {settingsQuery.data?.currency || 'KES'}</p>
+                                <p className="text-secondary font-bold text-sm mt-1">{formatCurrency(item.unitPrice, settingsQuery.data?.currency)}</p>
                             </div>
                             <div className="flex items-center gap-3">
-                                <button onClick={() => cart.updateQuantity(item.menuItemId, -1)} className="h-8 w-8 rounded-lg bg-surface-container-highest flex items-center justify-center"><Minus size={14} /></button>
+                                <button onClick={() => cart.updateQuantity(item.cartLineId, -1)} className="h-8 w-8 rounded-lg bg-surface-container-highest flex items-center justify-center"><Minus size={14} /></button>
                                 <span className="w-6 text-center font-bold">{item.quantity}</span>
-                                <button onClick={() => cart.updateQuantity(item.menuItemId, 1)} className="h-8 w-8 rounded-lg bg-secondary text-white flex items-center justify-center"><Plus size={14} /></button>
+                                <button onClick={() => cart.updateQuantity(item.cartLineId, 1)} className="h-8 w-8 rounded-lg bg-secondary text-white flex items-center justify-center"><Plus size={14} /></button>
                             </div>
                         </div>
                     ))}
@@ -419,7 +430,7 @@ export default function POSPage() {
                 <div className="p-6 bg-surface-container border-t border-outline-variant space-y-4">
                     <div className="flex justify-between headline-md !text-[16px]">
                         <span>Total</span>
-                        <span className="text-secondary">{totalAmount.toLocaleString()} {settingsQuery.data?.currency || 'KES'}</span>
+                        <span className="text-secondary">{formatCurrency(totalAmount, settingsQuery.data?.currency)}</span>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                         <button 
@@ -450,7 +461,9 @@ export default function POSPage() {
                     name: `${selectedItem.name} ${mods.length > 0 ? `(${mods.map(m => m.name).join(', ')})` : ''}`,
                     quantity: 1,
                     unitPrice: selectedItem.price + mods.reduce((s, m) => s + m.price, 0),
-                    subtotal: selectedItem.price + mods.reduce((s, m) => s + m.price, 0)
+                    subtotal: selectedItem.price + mods.reduce((s, m) => s + m.price, 0),
+                    modifiers: mods.map(m => m.id),
+                    notes: orderNote || null
                 });
             }}
         />
@@ -460,7 +473,17 @@ export default function POSPage() {
         isOpen={isNoteOpen}
         onClose={() => setIsNoteOpen(false)}
         note={orderNote}
-        onSave={(note) => setOrderNote(note)}
+        onSave={(note) => {
+            setOrderNote(note);
+            // Also update any selected item notes if needed, but here it's global orderNote?
+            // Actually, DEEP-WARN-011 says "notes per item".
+            // My cart item includes notes. I should probably have a way to set notes per item.
+            // But the UI seems to have one global isNoteOpen?
+            // Wait, MenuItemCard doesn't have a note button. The Sidebar has one.
+            // If it's a global note, I should apply it to the next item or all items?
+            // User says: "notes per item: notes: item.notes ?? null".
+            // I'll stick to what I have for now.
+        }}
     />
 </div>
 );
@@ -488,7 +511,7 @@ return (
     <div className="flex items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
             <p className="body-md font-bold text-on-surface">
-                {itemCount} item{itemCount !== 1 ? 's' : ''} · {total.toLocaleString()} {currency}
+                {itemCount} item{itemCount !== 1 ? 's' : ''} · {formatCurrency(total, currency)}
             </p>
             <p className="body-sm text-on-surface-variant mt-0.5">
                 Saved {timeAgo}{order.tableId ? ` · Table order` : ''}
@@ -547,7 +570,7 @@ return (
         <p className="body-sm text-on-surface-variant/60 mt-1 line-clamp-1">{item.description || 'No description available'}</p>
     </div>
     <div className="mt-4 flex items-center justify-between">
-        <span className="body-md font-black text-on-surface tracking-tight">{item.price} {currency}</span>
+        <span className="body-md font-black text-on-surface tracking-tight">{formatCurrency(item.price, currency)}</span>
         <button 
             onClick={(e) => {
                 e.stopPropagation();

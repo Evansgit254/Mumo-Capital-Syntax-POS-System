@@ -77,10 +77,18 @@ router.get('/', requireRole(Role.TENANT_ADMIN, Role.MANAGER, Role.STAFF), async 
 });
 
 // Create a shift
-router.post('/', requireRole(Role.TENANT_ADMIN, Role.MANAGER, Role.STAFF), async (req, res) => {
+router.post('/', requireRole(Role.TENANT_ADMIN, Role.MANAGER), async (req, res) => {
     try {
         const tenantId = req.user!.tenantId;
         const data = createShiftSchema.parse(req.body);
+
+        // DEEP-CRIT-011: Verify target userId belongs to tenant
+        const targetUser = await prisma.user.findFirst({
+            where: { id: data.userId, tenantId }
+        });
+        if (!targetUser) {
+            return res.status(404).json({ error: 'User not found in this tenant' });
+        }
 
         const shift = await prisma.shift.create({
             data: {

@@ -1,5 +1,6 @@
-import React from 'react';
-import { X, FileText } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { FileText, AlertCircle } from 'lucide-react';
+import Dialog from '../ui/Dialog';
 
 interface NoteDrawerProps {
     isOpen: boolean;
@@ -8,55 +9,89 @@ interface NoteDrawerProps {
     onSave: (note: string) => void;
 }
 
+/**
+ * DEEP-WARN-011: Notes sent to server - Added 200 char validation.
+ * DEEP-WARN-012: Modal accessibility - Uses Dialog component.
+ */
 export default function NoteDrawer({ isOpen, onClose, note, onSave }: NoteDrawerProps) {
-    const [tempNote, setTempNote] = React.useState(note);
+    const [tempNote, setTempNote] = useState(note);
+    const [error, setError] = useState<string | null>(null);
 
-    React.useEffect(() => {
+    useEffect(() => {
         setTempNote(note);
+        setError(null);
     }, [note, isOpen]);
 
-    if (!isOpen) return null;
+    const handleSave = () => {
+        if (tempNote.length > 200) {
+            setError('Note cannot exceed 200 characters');
+            return;
+        }
+        onSave(tempNote);
+        onClose();
+    };
 
     return (
-        <div className="fixed inset-0 z-[110] flex justify-end">
-            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-            <div className="relative w-full max-w-md bg-surface-container-high h-full shadow-2xl border-l border-outline-variant flex flex-col animate-in slide-in-from-right duration-300">
-                <div className="p-8 border-b border-outline-variant flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <FileText size={24} className="text-secondary" />
-                        <h3 className="headline-md">Order Notes</h3>
-                    </div>
-                    <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full">
-                        <X size={24} />
-                    </button>
+        <Dialog 
+            isOpen={isOpen} 
+            onClose={onClose} 
+            title="Order Notes"
+            size="md"
+        >
+            <div className="space-y-6">
+                <div className="flex items-center gap-3 p-4 bg-secondary/5 rounded-2xl border border-secondary/10 text-secondary">
+                    <FileText size={20} />
+                    <span className="font-bold">Special Instructions</span>
                 </div>
 
-                <div className="flex-1 p-8">
-                    <label className="label-sm text-on-surface-variant mb-3 block">Special Instructions / Kitchen Notes</label>
+                <div className="space-y-2">
+                    <label className="text-xs font-black uppercase tracking-[0.2em] text-white/40 block">
+                        Kitchen Notes
+                    </label>
                     <textarea 
-                        className="w-full h-64 bg-surface-container border border-outline-variant rounded-2xl p-6 text-on-surface placeholder:text-on-surface-variant/30 focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all resize-none body-md"
+                        className="w-full h-48 bg-white/5 border border-white/10 rounded-2xl p-6 text-white placeholder:text-white/20 focus:ring-2 focus:ring-secondary/40 focus:border-secondary transition-all resize-none"
                         placeholder="e.g. Extra spicy, No onions, Guest allergic to peanuts..."
                         value={tempNote}
-                        onChange={(e) => setTempNote(e.target.value)}
+                        onChange={(e) => {
+                            setTempNote(e.target.value);
+                            if (e.target.value.length <= 200) setError(null);
+                        }}
                     />
-                    <div className="mt-6 p-4 bg-tertiary/10 border border-tertiary/20 rounded-xl flex gap-3">
-                        <span className="text-tertiary font-black">!</span>
-                        <p className="body-sm text-on-surface-variant leading-tight">These notes will be printed on the KDS and kitchen tickets.</p>
+                    <div className="flex justify-between items-center text-[10px] uppercase font-bold tracking-widest px-2">
+                        <span className={tempNote.length > 200 ? "text-red-400" : "text-white/40"}>
+                            {tempNote.length} / 200 Characters
+                        </span>
+                        {tempNote.length > 200 && (
+                            <span className="text-red-400 flex items-center gap-1">
+                                <AlertCircle size={10} /> Too long
+                            </span>
+                        )}
                     </div>
                 </div>
 
-                <div className="p-8 bg-surface-container border-t border-outline-variant">
+                {error && (
+                    <div className="p-4 bg-red-400/10 border border-red-400/20 rounded-xl flex items-center gap-3 text-red-400">
+                        <AlertCircle size={18} />
+                        <p className="text-sm font-bold uppercase tracking-wider">{error}</p>
+                    </div>
+                )}
+
+                <div className="p-4 bg-orange-400/10 border border-orange-400/20 rounded-xl flex gap-3 text-orange-400">
+                    <AlertCircle size={18} className="shrink-0" />
+                    <p className="text-xs font-bold leading-tight uppercase tracking-wide">
+                        These notes will be printed on kitchen tickets and visible on the KDS.
+                    </p>
+                </div>
+
+                <div className="pt-6 border-t border-white/10">
                     <button 
-                        onClick={() => {
-                            onSave(tempNote);
-                            onClose();
-                        }}
-                        className="btn-primary w-full h-[56px]"
+                        onClick={handleSave}
+                        className="w-full h-16 bg-secondary hover:bg-secondary-dark text-white rounded-2xl font-black uppercase tracking-[0.2em] shadow-xl shadow-secondary/20 active:scale-[0.98] transition-all"
                     >
-                        Save Note
+                        Save Notes
                     </button>
                 </div>
             </div>
-        </div>
+        </Dialog>
     );
 }

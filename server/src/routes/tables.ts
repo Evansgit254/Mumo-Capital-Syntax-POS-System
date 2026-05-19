@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma';
-import { notFound } from '../lib/errors';
+import { notFound, forbidden } from '../lib/errors';
 import { validate } from '../middleware/validate';
 import { requireRole } from '../middleware/requireRole';
 import { createTableSchema, updateTableSchema, batchUpdateTablesSchema } from '../validators/table';
@@ -156,32 +156,69 @@ router.put(
             const { tenantId } = req.user!;
             const { tables } = req.body;
 
-            // Execute transaction with upsert to support creating new tables from the floor planner
-            const result = await prisma.$transaction(
-                tables.map((t: any) => {
-                    return prisma.table.upsert({
-                        where: { id: t.id },
-                        update: {
-                            number: t.number,
-                            capacity: t.capacity,
-                            x: t.x || 0,
-                            y: t.y || 0,
-                            zone: t.zone || 'Indoor',
-                            shape: t.shape || 'SQUARE',
-                        },
-                        create: {
-                            id: t.id,
-                            tenantId,
-                            number: t.number,
-                            capacity: t.capacity || 2,
-                            x: t.x || 0,
-                            y: t.y || 0,
-                            zone: t.zone || 'Indoor',
-                            shape: t.shape || 'SQUARE',
+            // DEEP-CRIT-004: Tenant-scoped batch update — prevents cross-tenant table hijacking
+            const result = await prisma.$transaction(async (tx) => {
+                const results = [];
+                for (const t of tables as any[]) {
+                    if (t.id) {
+                        // Try tenant-scoped update first
+                        const count = await tx.table.updateMany({
+                            where: { id: t.id, tenantId },
+                            data: {
+                                number: t.number,
+                                capacity: t.capacity,
+                                x: t.x || 0,
+                                y: t.y || 0,
+                                zone: t.zone || 'Indoor',
+                                shape: t.shape || 'SQUARE',
+                            }
+                        });
+                        if (count.count === 0) {
+                            // Check if table exists in another tenant (cross-tenant attack)
+                            const foreign = await tx.table.findUnique({
+                                where: { id: t.id },
+                                select: { id: true }
+                            });
+                            if (foreign) {
+                                throw forbidden(`Table ${t.id} not found or not in your tenant`);
+                            }
+                            // Genuinely new table with client-generated ID
+                            const created = await tx.table.create({
+                                data: {
+                                    id: t.id,
+                                    tenantId,
+                                    number: t.number,
+                                    capacity: t.capacity || 2,
+                                    x: t.x || 0,
+                                    y: t.y || 0,
+                                    zone: t.zone || 'Indoor',
+                                    shape: t.shape || 'SQUARE',
+                                }
+                            });
+                            results.push(created);
+                        } else {
+                            // Fetch the updated record for response
+                            const updated = await tx.table.findUnique({ where: { id: t.id } });
+                            results.push(updated);
                         }
-                    });
-                })
-            );
+                    } else {
+                        // No ID — create new table
+                        const created = await tx.table.create({
+                            data: {
+                                tenantId,
+                                number: t.number,
+                                capacity: t.capacity || 2,
+                                x: t.x || 0,
+                                y: t.y || 0,
+                                zone: t.zone || 'Indoor',
+                                shape: t.shape || 'SQUARE',
+                            }
+                        });
+                        results.push(created);
+                    }
+                }
+                return results;
+            });
 
             res.json({ updated: result.length, tables: result });
         } catch (err) {

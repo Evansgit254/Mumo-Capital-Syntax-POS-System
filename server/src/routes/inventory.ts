@@ -248,6 +248,7 @@ router.delete(
 );
 
 // ── POST /api/inventory/:id/adjust ──────────────────────────────────────────
+// DEEP-CRIT-006: Atomic increment/decrement to prevent race conditions
 router.post(
     '/:id/adjust',
     requireRole(Role.SUPER_ADMIN, Role.TENANT_ADMIN, Role.MANAGER),
@@ -257,58 +258,72 @@ router.post(
             const user = req.user; if (!user) return res.sendStatus(401);
             const { tenantId, id: userId } = user;
             const { adjustmentType, quantity, reason } = req.body;
-
-            const item = await prisma.inventoryItem.findFirst({
-                where: { id: req.params.id, tenantId, deletedAt: null },
-            });
-            if (!item) throw notFound('Inventory item not found');
-
-            let newStock: Prisma.Decimal;
+            const itemId = req.params.id;
             const quantityDecimal = new Prisma.Decimal(quantity);
 
-            if (adjustmentType === AdjustmentType.WASTE || adjustmentType === AdjustmentType.TRANSFER) {
-                newStock = item.currentStock.minus(quantityDecimal);
-                if (newStock.lt(0)) {
-                    throw badRequest(
-                        `Insufficient stock. Current: ${item.currentStock.toNumber()}, Requested: ${quantity}`
-                    );
-                }
-            } else {
-                newStock = item.currentStock.plus(quantityDecimal);
-            }
+            const result = await prisma.$transaction(async (tx) => {
+                // Verify item exists and belongs to tenant
+                const item = await tx.inventoryItem.findFirst({
+                    where: { id: itemId, tenantId, deletedAt: null },
+                });
+                if (!item) throw notFound('Inventory item not found');
 
-            // Wrap in transaction to ensure audit log is always created
-            const [updated] = await prisma.$transaction([
-                prisma.inventoryItem.update({
-                    where: { id: req.params.id },
-                    data: { currentStock: newStock },
-                }),
-                prisma.inventoryAuditLog.create({
+                const previousStock = item.currentStock;
+
+                if (adjustmentType === AdjustmentType.WASTE || adjustmentType === AdjustmentType.TRANSFER) {
+                    // For reductions, verify sufficient stock inside the transaction
+                    if (item.currentStock.lessThan(quantityDecimal)) {
+                        throw badRequest(
+                            `Insufficient stock. Current: ${item.currentStock.toNumber()}, Requested: ${quantity}`
+                        );
+                    }
+                    // Atomic decrement — no read-modify-write
+                    await tx.inventoryItem.update({
+                        where: { id: itemId },
+                        data: { currentStock: { decrement: quantityDecimal } },
+                    });
+                } else {
+                    // Atomic increment — no read-modify-write
+                    await tx.inventoryItem.update({
+                        where: { id: itemId },
+                        data: { currentStock: { increment: quantityDecimal } },
+                    });
+                }
+
+                // Fetch updated stock for audit log and response
+                const updated = await tx.inventoryItem.findUnique({
+                    where: { id: itemId },
+                });
+
+                // Create audit log in same transaction
+                await tx.inventoryAuditLog.create({
                     data: {
                         tenantId,
-                        inventoryItemId: req.params.id,
-                        previousQty: item.currentStock,
-                        newQty: newStock,
+                        inventoryItemId: itemId,
+                        previousQty: previousStock,
+                        newQty: updated!.currentStock,
                         adjustmentType,
                         reason,
                         userId,
                     },
-                }),
-            ]);
+                });
+
+                return { updated: updated!, previousStock };
+            });
 
             res.json({
                 item: {
-                    ...updated,
-                    currentStock: updated.currentStock.toNumber(),
-                    minStock: updated.minStock.toNumber(),
-                    costPerUnit: updated.costPerUnit.toNumber()
+                    ...result.updated,
+                    currentStock: result.updated.currentStock.toNumber(),
+                    minStock: result.updated.minStock.toNumber(),
+                    costPerUnit: result.updated.costPerUnit.toNumber()
                 },
                 adjustment: {
                     type: adjustmentType,
                     quantity,
                     reason,
-                    previousStock: item.currentStock.toNumber(),
-                    newStock: updated.currentStock.toNumber(),
+                    previousStock: result.previousStock.toNumber(),
+                    newStock: result.updated.currentStock.toNumber(),
                 },
             });
         } catch (err) {

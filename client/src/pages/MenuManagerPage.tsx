@@ -2,8 +2,11 @@ import { useState, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import { getErrorMessage } from '../api/service';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { menuService } from '../api/service';
+import { menuService, tenantService } from '../api/service';
 import { useStore } from '../store/useStore';
+import Dialog from '../components/ui/Dialog';
+import { formatCurrency } from '../lib/formatCurrency';
+import Decimal from 'decimal.js';
 import { 
     Plus, 
     Search, 
@@ -37,6 +40,11 @@ export default function MenuManagerPage() {
     const menuQuery = useQuery({
         queryKey: ['menus'],
         queryFn: () => menuService.getAll(),
+    });
+
+    const settingsQuery = useQuery({
+        queryKey: ['tenant-settings'],
+        queryFn: () => tenantService.getSettings(),
     });
 
     const deleteMutation = useMutation({
@@ -135,7 +143,7 @@ export default function MenuManagerPage() {
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        <span className="body-md font-black text-secondary">{item.price.toLocaleString()} KES</span>
+                                        <span className="body-md font-black text-secondary">{formatCurrency(item.price, settingsQuery.data?.currency)}</span>
                                     </td>
                                     <td className="px-6 py-4">
                                         {item.isAvailable ? (
@@ -197,30 +205,33 @@ export default function MenuManagerPage() {
                 </div>
             </div>
 
-            {/* Simple Overlay for Modals placeholder */}
-            {(isAdding || editingItem) && (
-                <div className="fixed inset-0 bg-surface/90 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
-                    <MenuItemForm 
-                        initialData={editingItem || undefined}
-                        categories={categories}
-                        onClose={() => { setIsAdding(false); setEditingItem(null); }} 
-                        onSuccess={() => {
-                            setIsAdding(false);
-                            setEditingItem(null);
-                            queryClient.invalidateQueries({ queryKey: ['menus'] });
-                        }}
-                    />
-                </div>
-            )}
+            {/* Modals */}
+            <Dialog 
+                isOpen={isAdding || !!editingItem} 
+                onClose={() => { setIsAdding(false); setEditingItem(null); }}
+                title={editingItem ? "Edit Menu Item" : "Add Menu Item"}
+            >
+                <MenuItemForm 
+                    initialData={editingItem || undefined}
+                    categories={categories}
+                    onClose={() => { setIsAdding(false); setEditingItem(null); }} 
+                    onSuccess={() => {
+                        setIsAdding(false);
+                        setEditingItem(null);
+                        queryClient.invalidateQueries({ queryKey: ['menus'] });
+                    }}
+                    currency={settingsQuery.data?.currency}
+                />
+            </Dialog>
         </div>
     );
 }
 
-function MenuItemForm({ onClose, onSuccess, initialData, categories }: { onClose: () => void, onSuccess: () => void, initialData?: MenuItem, categories: string[] }) {
+function MenuItemForm({ onClose, onSuccess, initialData, categories, currency }: { onClose: () => void, onSuccess: () => void, initialData?: MenuItem, categories: string[], currency?: string }) {
     const [form, setForm] = useState({
         name: initialData?.name || '',
         description: initialData?.description || '',
-        price: initialData?.price || 0,
+        price: initialData?.price?.toString() || '0',
         categoryId: initialData?.categoryId || '',
         isAvailable: initialData?.isAvailable ?? true,
     });
@@ -238,13 +249,23 @@ function MenuItemForm({ onClose, onSuccess, initialData, categories }: { onClose
         e.preventDefault();
         const errs: Record<string, string> = {};
         if (!form.name.trim()) errs.name = 'Name is required';
-        if (form.price <= 0) errs.price = 'Price must be positive';
+        
+        let decimalPrice: Decimal;
+        try {
+            decimalPrice = new Decimal(form.price);
+            if (decimalPrice.lte(0)) errs.price = 'Price must be positive';
+        } catch {
+            errs.price = 'Invalid price format';
+        }
         
         if (Object.keys(errs).length > 0) {
             setErrors(errs);
             return;
         }
-        mutation.mutate(form);
+        mutation.mutate({
+            ...form,
+            price: new Decimal(form.price).toNumber()
+        });
     };
 
     return (
@@ -281,13 +302,15 @@ function MenuItemForm({ onClose, onSuccess, initialData, categories }: { onClose
 
                 <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                        <label className="label-sm text-on-surface-variant">Price (KES)</label>
+                        <label className="label-sm text-on-surface-variant">Price ({currency || 'KES'})</label>
                         <input 
                             type="number" 
                             value={form.price}
-                            onChange={e => setForm({ ...form, price: parseFloat(e.target.value) || 0 })}
+                            onChange={e => setForm({ ...form, price: e.target.value })}
+                            step="0.01"
                             className={cn("input-field", errors.price && "border-error focus:ring-error/20")}
                         />
+                        {errors.price && <p className="text-xs text-error mt-1">{errors.price}</p>}
                     </div>
                     <div className="space-y-2">
                         <label className="label-sm text-on-surface-variant">Category</label>

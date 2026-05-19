@@ -56,12 +56,13 @@ const NAV_ITEMS = [
 ];
 
 export default function Shell() {
-    const { session, clearSession, ui } = useStore();
+    const { session, ui } = useStore();
     const { setSidebarOpen } = ui;
     const navigate = useNavigate();
 
+    // DEEP-WARN-014: Use comprehensive logout() instead of just clearSession()
     const handleLogout = () => {
-        clearSession();
+        useStore.getState().logout();
         navigate('/login');
     };
 

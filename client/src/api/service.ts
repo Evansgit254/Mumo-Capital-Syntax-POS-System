@@ -162,15 +162,12 @@ async function performRefresh(): Promise<string | null> {
             }
             return null;
         } catch (err) {
-            useStore.getState().setSession({
-                token: null,
-                tenantId: null,
-                tenantName: null,
-                role: null,
-                userId: null,
-                email: null,
-                firstName: null,
-            });
+            // DEEP-WARN-015: On refresh failure, clear session and redirect to login
+            useStore.getState().clearSession();
+            const currentPath = window.location.pathname;
+            if (currentPath !== '/login' && currentPath !== '/register' && !currentPath.startsWith('/super-admin')) {
+                window.location.href = `/login?redirect=${encodeURIComponent(currentPath)}`;
+            }
             return null;
         } finally {
             refreshPromise = null;
@@ -267,7 +264,8 @@ export const vendorService = {
 };
 
 export const purchaseOrderService = {
-    getAll: () => api.get<PurchaseOrder[]>('/api/vendors/orders').then(r => r.data),
+    // DEEP-CRIT-012: Return paginated envelope, not raw array
+    getAll: (params?: PaginationParams) => api.get<PaginatedResponse<PurchaseOrder>>('/api/vendors/orders', { params }).then(r => r.data),
     create: (data: PurchaseOrderInput) => api.post<PurchaseOrder>('/api/vendors/orders', data).then(r => r.data),
     updateStatus: (id: string, status: PurchaseOrder['status'], receivedItems?: ReceivedPurchaseOrderItem[]) => 
         api.patch<PurchaseOrder | { message: string }>(`/api/vendors/orders/${id}/status`, { status, receivedItems }).then(r => r.data),

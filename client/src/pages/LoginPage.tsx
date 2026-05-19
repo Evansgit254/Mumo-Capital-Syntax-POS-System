@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 import { useState, useEffect, FormEvent } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { authService, getErrorMessage } from '../api/service';
 import { Loader2, CheckCircle2, Eye, EyeOff, FileText, Globe } from 'lucide-react';
@@ -11,6 +11,7 @@ export default function LoginPage() {
     const setSession = useStore((state) => state.setSession);
     const setTenantId = useStore((state) => state.guest.setTenantId);
     const navigate = useNavigate();
+    const location = useLocation();
 
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
@@ -60,7 +61,11 @@ export default function LoginPage() {
                 firstName: user.firstName,
             });
 
-            navigate('/dashboard', { replace: true });
+            // DEEP-WARN-016: Navigate to deep-link return path after login
+            const from = (location.state as { from?: { pathname: string } } | null)?.from?.pathname
+                || new URLSearchParams(location.search).get('redirect')
+                || '/dashboard';
+            navigate(from, { replace: true });
         } catch (err) {
             setError(getErrorMessage(err) || 'Authentication failed');
         } finally {

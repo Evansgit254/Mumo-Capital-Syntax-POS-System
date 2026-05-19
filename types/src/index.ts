@@ -148,12 +148,10 @@ export interface Customer {
 // ── Inventory ────────────────────────────────────────────────────────────────
 
 export enum AdjustmentType {
-    WASTE = 'WASTE',
-    RESTOCK = 'RESTOCK',
-    TRANSFER = 'TRANSFER',
-    CORRECTION = 'CORRECTION',
+    AUDIT = 'AUDIT',
     PURCHASE = 'PURCHASE',
-    AUDIT = 'AUDIT'
+    SALE = 'SALE',
+    WASTE = 'WASTE'
 }
 
 export interface InventoryItem {

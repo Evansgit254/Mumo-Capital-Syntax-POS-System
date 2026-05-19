@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { X, Plus, Minus, Check, Loader2 } from 'lucide-react';
+import { Plus, Check, Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { menuService } from '../../api/service';
+import Dialog from '../ui/Dialog';
+import { formatCurrency } from '../../lib/formatCurrency';
+import { useStore } from '../../store/useStore';
 
 interface Modifier {
     id: string;
@@ -13,15 +16,27 @@ interface Modifier {
 interface ModifierModalProps {
     isOpen: boolean;
     onClose: () => void;
-    itemId: string; // Changed from itemName to itemId
+    itemId: string;
     itemName: string;
     onConfirm: (selected: Modifier[]) => void;
 }
 
+/**
+ * DEEP-WARN-009: Modifier modal state leaks - Reset selected state on open.
+ * DEEP-WARN-012: Modal accessibility - Uses Dialog component.
+ */
 export default function ModifierModal({ isOpen, onClose, itemId, itemName, onConfirm }: ModifierModalProps) {
     const [selected, setSelected] = useState<Modifier[]>([]);
+    const { session } = useStore();
+    const currency = session.tenantId ? 'KES' : 'KES'; // Will be optimized later with tenant settings
 
-    // Stable refs to avoid infinite loops from inline callbacks
+    // DEEP-WARN-009: Reset state when opening for a new item
+    useEffect(() => {
+        if (isOpen && itemId) {
+            setSelected([]);
+        }
+    }, [isOpen, itemId]);
+
     const onConfirmRef = useRef(onConfirm);
     const onCloseRef = useRef(onClose);
     onConfirmRef.current = onConfirm;
@@ -41,8 +56,6 @@ export default function ModifierModal({ isOpen, onClose, itemId, itemName, onCon
         }
     }, [isOpen, modifiers, isLoading]);
 
-    if (!isOpen) return null;
-
     const toggleModifier = (mod: Modifier) => {
         setSelected(prev => 
             prev.find(m => m.id === mod.id)
@@ -52,31 +65,23 @@ export default function ModifierModal({ isOpen, onClose, itemId, itemName, onCon
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 sm:p-10">
-            <div className="absolute inset-0 bg-surface/80 backdrop-blur-md animate-in fade-in duration-500" onClick={onClose} />
-            <div className="relative w-full max-w-lg bg-surface-container-lowest rounded-[2.5rem] shadow-[0_32px_64px_-12px_rgba(0,0,0,0.6)] border border-outline-variant overflow-hidden animate-in zoom-in-95 duration-300 ring-1 ring-white/10">
-                {/* Header Section */}
-                <div className="p-10 pb-6">
-                    <div className="flex items-center justify-between mb-2">
-                        <div className="space-y-1">
-                            <h3 className="display-sm !text-3xl tracking-tight">Customize Item</h3>
-                            <p className="body-lg text-primary font-bold flex items-center gap-2">
-                                <span className="h-2 w-2 rounded-full bg-primary animate-pulse" />
-                                {itemName}
-                            </p>
-                        </div>
-                        <button onClick={onClose} className="h-12 w-12 rounded-2xl hover:bg-surface-container-high flex items-center justify-center text-on-surface-variant transition-colors border border-outline-variant/30">
-                            <X size={24} />
-                        </button>
-                    </div>
+        <Dialog 
+            isOpen={isOpen} 
+            onClose={onClose} 
+            title="Customize Item"
+            size="md"
+        >
+            <div className="space-y-6">
+                <div className="flex items-center gap-3 p-4 bg-primary/5 rounded-2xl border border-primary/10">
+                    <div className="h-3 w-3 rounded-full bg-primary animate-pulse" />
+                    <span className="text-lg font-bold text-primary">{itemName}</span>
                 </div>
 
-                {/* Modifiers List */}
-                <div className="px-10 py-4 space-y-3 max-h-[50vh] overflow-y-auto custom-scrollbar">
+                <div className="space-y-3 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
                     {isLoading ? (
-                        <div className="flex flex-col items-center justify-center py-20 space-y-6 text-on-surface-variant">
-                            <Loader2 className="animate-spin text-primary" size={48} strokeWidth={3} />
-                            <p className="headline-sm font-bold opacity-50 uppercase tracking-widest text-xs">Preparing categories...</p>
+                        <div className="flex flex-col items-center justify-center py-10 space-y-4">
+                            <Loader2 className="animate-spin text-primary" size={32} />
+                            <p className="text-sm font-medium text-white/50 uppercase tracking-widest">Loading options...</p>
                         </div>
                     ) : (
                         <div className="grid grid-cols-1 gap-3">
@@ -87,33 +92,33 @@ export default function ModifierModal({ isOpen, onClose, itemId, itemName, onCon
                                         key={mod.id}
                                         onClick={() => toggleModifier(mod)}
                                         className={cn(
-                                            "group w-full p-6 p-y-5 rounded-[1.5rem] border-2 flex items-center justify-between transition-all duration-300 active:scale-[0.98]",
+                                            "group w-full p-5 rounded-2xl border-2 flex items-center justify-between transition-all active:scale-[0.98]",
                                             isSelected
-                                                ? 'bg-primary/10 border-primary shadow-[0_0_20px_rgba(var(--primary-rgb),0.1)]'
-                                                : 'bg-surface-container-low border-outline-variant/50 text-on-surface hover:bg-surface-container-high hover:border-outline'
+                                                ? 'bg-primary/10 border-primary shadow-lg shadow-primary/5'
+                                                : 'bg-white/5 border-white/5 text-white hover:bg-white/10 hover:border-white/10'
                                         )}
                                     >
-                                        <div className="flex items-center gap-5">
+                                        <div className="flex items-center gap-4">
                                             <div className={cn(
-                                                "h-8 w-8 rounded-xl flex items-center justify-center transition-all duration-500",
+                                                "h-10 w-10 rounded-xl flex items-center justify-center transition-all",
                                                 isSelected
-                                                    ? 'bg-primary text-on-primary rotate-0 scale-100'
-                                                    : 'bg-surface-container-highest text-on-surface-variant rotate-[-45deg] scale-90 group-hover:rotate-0 group-hover:scale-100'
+                                                    ? 'bg-primary text-white'
+                                                    : 'bg-white/5 text-white/40 group-hover:bg-white/10'
                                             )}>
-                                                {isSelected ? <Check size={18} strokeWidth={3} /> : <Plus size={18} />}
+                                                {isSelected ? <Check size={20} strokeWidth={3} /> : <Plus size={20} />}
                                             </div>
                                             <div className="text-left">
-                                                <div className={cn("body-lg font-bold transition-colors", isSelected ? "text-primary" : "text-on-surface")}>
+                                                <div className={cn("font-bold", isSelected ? "text-primary" : "text-white")}>
                                                     {mod.name}
                                                 </div>
-                                                <div className="text-xs text-on-surface-variant font-medium uppercase tracking-widest opacity-60">Add-on Option</div>
+                                                <div className="text-xs text-white/40 uppercase tracking-wider">Add-on</div>
                                             </div>
                                         </div>
                                         <div className={cn(
-                                            "px-4 py-2 rounded-full label-sm font-black transition-all",
-                                            isSelected ? "bg-primary text-on-primary" : "bg-surface-container-highest text-on-surface-variant"
+                                            "px-3 py-1.5 rounded-lg text-sm font-bold",
+                                            isSelected ? "bg-primary text-white" : "bg-white/5 text-white/60"
                                         )}>
-                                            +KES {mod.price}
+                                            + {formatCurrency(mod.price, currency)}
                                         </div>
                                     </button>
                                 );
@@ -122,32 +127,32 @@ export default function ModifierModal({ isOpen, onClose, itemId, itemName, onCon
                     )}
                 </div>
 
-                {/* Footer / Action */}
-                <div className="p-10 pt-6 bg-surface-container-low/50 backdrop-blur-xl border-t border-outline-variant/30 mt-4">
-                    <div className="flex items-center justify-between mb-8 px-2">
-                        <div className="space-y-1">
-                            <div className="label-sm text-on-surface-variant uppercase font-bold tracking-widest">Added Cost</div>
-                            <div className="display-sm !text-orange-400">
-                                KES {selected.reduce((sum, m) => sum + m.price, 0).toLocaleString()}
+                <div className="pt-6 border-t border-white/10 space-y-6">
+                    <div className="flex items-center justify-between px-2">
+                        <div>
+                            <div className="text-xs text-white/40 uppercase font-black tracking-widest mb-1">Added Cost</div>
+                            <div className="text-2xl font-black text-orange-400">
+                                {formatCurrency(selected.reduce((sum, m) => sum + m.price, 0), currency)}
                             </div>
                         </div>
                         <div className="text-right">
-                           <div className="label-sm text-on-surface-variant uppercase font-bold tracking-widest">Selections</div>
-                           <div className="headline-sm text-primary">{selected.length} Item{selected.length !== 1 ? 's' : ''}</div>
+                           <div className="text-xs text-white/40 uppercase font-black tracking-widest mb-1">Selections</div>
+                           <div className="text-xl font-bold text-primary">{selected.length} Item{selected.length !== 1 ? 's' : ''}</div>
                         </div>
                     </div>
+                    
                     <button 
                         onClick={() => {
                             onConfirm(selected);
                             onClose();
                         }}
                         disabled={isLoading}
-                        className="btn-primary w-full h-[72px] rounded-[1.5rem] !text-lg !font-black uppercase tracking-[0.2em] shadow-2xl shadow-primary/30 active:scale-95 transition-all"
+                        className="w-full h-16 bg-primary hover:bg-primary-dark disabled:opacity-50 text-white rounded-2xl font-black uppercase tracking-widest shadow-xl shadow-primary/20 active:scale-[0.98] transition-all"
                     >
                         Confirm Selection
                     </button>
                 </div>
             </div>
-        </div>
+        </Dialog>
     );
 }

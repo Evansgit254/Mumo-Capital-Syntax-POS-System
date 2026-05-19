@@ -35,7 +35,7 @@ const VendorPage: React.FC = () => {
     const [isVendorModalOpen, setIsVendorModalOpen] = useState(false);
     const [isPOConfirmModalOpen, setIsPOConfirmModalOpen] = useState(false);
     const [selectedPO, setSelectedPO] = useState<any>(null);
-    const [receivedQtys, setReceivedQtys] = useState<Record<string, number>>({});
+    const [receivedQtys, setReceivedQtys] = useState<Record<string, string>>({});
     const [editingVendor, setEditingVendor] = useState<Vendor | null>(null);
     const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
@@ -46,15 +46,15 @@ const VendorPage: React.FC = () => {
 
     const { data: purchaseOrders, isLoading: posLoading } = useQuery({
         queryKey: ['purchase-orders'],
-        queryFn: purchaseOrderService.getAll,
+        queryFn: () => purchaseOrderService.getAll(),
     });
 
     const markReceivedMutation = useMutation({
         mutationFn: ({ id }: { id: string }) => {
+            // DEEP-CRIT-002: Send correct payload shape matching server expectations
             const items = selectedPO?.items?.map((item: LooseValue) => ({
                 inventoryItemId: item.inventoryItemId,
-                qtyReceived: receivedQtys[item.id] || 0,
-                reason: `Received via PO-${id.substring(0, 8)}`
+                receivedQty: parseFloat(receivedQtys[item.id] || '0'),
             }));
             return purchaseOrderService.updateStatus(id, 'RECEIVED', items);
         },
@@ -69,9 +69,10 @@ const VendorPage: React.FC = () => {
 
     const handleConfirmReceive = (po: LooseValue) => {
         setSelectedPO(po);
-        const qtys: Record<string, number> = {};
+        // DEEP-CRIT-002: Initialize from orderedQty (not item.quantity which doesn't exist)
+        const qtys: Record<string, string> = {};
         po.items?.forEach((item: LooseValue) => {
-            qtys[item.id] = item.quantity;
+            qtys[item.id] = String(item.orderedQty ?? 0);
         });
         setReceivedQtys(qtys);
         setIsPOConfirmModalOpen(true);
@@ -214,7 +215,7 @@ const VendorPage: React.FC = () => {
                             <div className="text-center">Status</div>
                             <div className="text-right">Actions</div>
                         </div>
-                        {purchaseOrders?.map((po: LooseValue) => (
+                        {(purchaseOrders as any)?.data?.map((po: LooseValue) => (
                             <div key={po.id} className="grid grid-cols-1 md:grid-cols-6 gap-4 md:gap-6 px-8 py-6 items-center hover:bg-surface-container-low/30 transition-colors">
                                 <div className="col-span-2 space-y-1">
                                      <div className="body-md font-bold text-on-surface">PO-{po.id.substring(0, 6).toUpperCase()}</div>
@@ -290,8 +291,8 @@ const VendorPage: React.FC = () => {
                         </div>
                         <div className="p-8 space-y-6 max-h-[60vh] overflow-y-auto">
                             {selectedPO?.items?.map((item: LooseValue) => {
-                                const received = receivedQtys[item.id] || 0;
-                                const isPartial = received < item.quantity;
+                                const received = receivedQtys[item.id] || '0';
+                                const isPartial = parseFloat(received) < (item.orderedQty ?? 0);
                                 return (
                                     <div key={item.id} className={`p-4 rounded-2xl border transition-colors ${isPartial ? 'bg-tertiary/10 border-tertiary/20' : 'bg-surface-container border-outline-variant'}`}>
                                         <div className="flex items-center justify-between gap-4">
@@ -300,8 +301,8 @@ const VendorPage: React.FC = () => {
                                                     <Package size={20} className={isPartial ? 'text-tertiary' : 'text-on-surface-variant'} />
                                                 </div>
                                                 <div>
-                                                    <div className="body-md font-bold text-on-surface">Item ID: {item.inventoryItemId.substring(0, 8)}</div>
-                                                    <div className="label-sm text-on-surface-variant">Ordered: {item.quantity} units</div>
+                                                    <div className="body-md font-bold text-on-surface">{item.inventoryItem?.name || `Item ${item.inventoryItemId.substring(0, 8)}`}</div>
+                                                    <div className="label-sm text-on-surface-variant">Ordered: {item.orderedQty} {item.inventoryItem?.unit || 'units'}</div>
                                                 </div>
                                             </div>
                                             <div className="w-32 space-y-1">
@@ -309,14 +310,14 @@ const VendorPage: React.FC = () => {
                                                 <input 
                                                     type="number"
                                                     value={received}
-                                                    onChange={(e) => setReceivedQtys(prev => ({ ...prev, [item.id]: Number(e.target.value) }))}
+                                                    onChange={(e) => setReceivedQtys(prev => ({ ...prev, [item.id]: e.target.value }))}
                                                     className="input-field py-2 text-center font-bold"
                                                 />
                                             </div>
                                         </div>
                                         {isPartial && (
                                             <div className="mt-3 flex items-center gap-2 text-tertiary text-xs font-bold uppercase tracking-wider">
-                                                <AlertCircle size={14} /> Partial Shipment Noted
+                                                <AlertCircle size={14} /> Partial Shipment
                                             </div>
                                         )}
                                     </div>

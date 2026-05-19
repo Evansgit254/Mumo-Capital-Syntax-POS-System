@@ -22,13 +22,17 @@ import {
     ArrowRight
 } from 'lucide-react';
 import { InventoryItem } from '@mumo/types';
-import { inventoryService, getErrorMessage } from '../../api/service';
+import { inventoryService, getErrorMessage, tenantService } from '../../api/service';
 import { useStore } from '../../store/useStore';
 import Skeleton from '../../components/ui/Skeleton';
 import { toast } from 'react-hot-toast';
 import { format } from 'date-fns';
 import { downloadCSV } from '../../lib/exportCsv';
 import { useNavigate } from 'react-router-dom';
+import Dialog from '../../components/ui/Dialog';
+import { formatCurrency } from '../../lib/formatCurrency';
+import { formatDate } from '../../lib/formatDate';
+import { AdjustmentType } from '@mumo/types';
 
 const InventoryPage: React.FC = () => {
     const queryClient = useQueryClient();
@@ -51,6 +55,11 @@ const InventoryPage: React.FC = () => {
         queryKey: ['inventory-audit'],
         queryFn: () => inventoryService.getAuditLog(),
         enabled: activeTab === 'audit',
+    });
+
+    const settingsQuery = useQuery({
+        queryKey: ['tenant-settings'],
+        queryFn: () => tenantService.getSettings(),
     });
 
     const isLoading = activeTab === 'stock' ? itemsLoading : auditLoading;
@@ -157,7 +166,7 @@ const InventoryPage: React.FC = () => {
                         <span className="label-sm text-on-surface-variant font-bold uppercase tracking-wider">Total Value</span>
                     </div>
                     <div className="space-y-1">
-                        <div className="display-sm">KES {stats.value.toLocaleString()}</div>
+                        <div className="display-sm">{formatCurrency(stats.value, settingsQuery.data?.currency)}</div>
                         <div className="flex items-center gap-1 text-on-surface-variant body-sm">
                             Estimated stock valuation
                         </div>
@@ -293,7 +302,7 @@ const InventoryPage: React.FC = () => {
 
                                         <div className="text-center">
                                             <div className="body-md text-on-surface-variant font-medium">
-                                                KES {item.costPerUnit}
+                                                {formatCurrency(item.costPerUnit, settingsQuery.data?.currency)}
                                             </div>
                                         </div>
 
@@ -406,9 +415,9 @@ const InventoryPage: React.FC = () => {
                                                 "{log.reason || 'No reason provided'}"
                                             </div>
                                         </div>
-                                        <div className="text-right">
+                                    <div className="text-right">
                                             <div className="body-sm font-medium text-on-surface">
-                                                {format(new Date(log.createdAt), 'MMM dd, HH:mm')}
+                                                {formatDate(log.createdAt, settingsQuery.data?.timezone, 'MMM dd, HH:mm')}
                                             </div>
                                         </div>
                                     </div>
@@ -437,27 +446,36 @@ const InventoryPage: React.FC = () => {
                 </button>
             </div>
 
-            {/* New/Edit Item Modal */}
-            {(showAddModal || editingItem) && (
-                <div className="fixed inset-0 bg-surface/90 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
-                    <InventoryItemForm
-                        initialData={editingItem || undefined}
-                        onClose={() => {
-                            setShowAddModal(false);
-                            setEditingItem(null);
-                        }}
-                        onSuccess={() => {
-                            setShowAddModal(false);
-                            setEditingItem(null);
-                            queryClient.invalidateQueries({ queryKey: ['inventory'] });
-                        }}
-                    />
-                </div>
-            )}
+            {/* Modals */}
+            <Dialog 
+                isOpen={showAddModal || !!editingItem} 
+                onClose={() => {
+                    setShowAddModal(false);
+                    setEditingItem(null);
+                }}
+                title={editingItem ? "Edit Inventory Item" : "Add Inventory Item"}
+            >
+                <InventoryItemForm
+                    initialData={editingItem || undefined}
+                    onClose={() => {
+                        setShowAddModal(false);
+                        setEditingItem(null);
+                    }}
+                    onSuccess={() => {
+                        setShowAddModal(false);
+                        setEditingItem(null);
+                        queryClient.invalidateQueries({ queryKey: ['inventory'] });
+                    }}
+                    currency={settingsQuery.data?.currency}
+                />
+            </Dialog>
 
-            {/* Adjustment Modal */}
-            {adjustingItem && (
-                <div className="fixed inset-0 bg-surface/90 backdrop-blur-md z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
+            <Dialog 
+                isOpen={!!adjustingItem} 
+                onClose={() => setAdjustingItem(null)}
+                title="Stock Adjustment"
+            >
+                {adjustingItem && (
                     <StockAdjustmentForm
                         item={adjustingItem}
                         onClose={() => setAdjustingItem(null)}
@@ -467,14 +485,14 @@ const InventoryPage: React.FC = () => {
                             queryClient.invalidateQueries({ queryKey: ['inventory-audit'] });
                         }}
                     />
-                </div>
-            )}
+                )}
+            </Dialog>
         </div>
     );
 };
 
 // ── Inventory Item Form (Create & Edit) ───────────────────────────────────
-function InventoryItemForm({ initialData, onClose, onSuccess }: { initialData?: InventoryItem; onClose: () => void; onSuccess: () => void }) {
+function InventoryItemForm({ initialData, onClose, onSuccess, currency }: { initialData?: InventoryItem; onClose: () => void; onSuccess: () => void; currency?: string }) {
     const [form, setForm] = useState({
         name: initialData?.name || '',
         sku: initialData?.sku || '',
@@ -582,7 +600,7 @@ function InventoryItemForm({ initialData, onClose, onSuccess }: { initialData?: 
                         />
                     </div>
                     <div className="space-y-2">
-                        <label className="label-sm text-on-surface-variant">Cost / Unit (KES)</label>
+                        <label className="label-sm text-on-surface-variant">Cost / Unit ({currency || 'KES'})</label>
                         <input
                             type="number"
                             value={form.costPerUnit}
@@ -613,9 +631,10 @@ function InventoryItemForm({ initialData, onClose, onSuccess }: { initialData?: 
 function StockAdjustmentForm({ item, onClose, onSuccess }: { item: InventoryItem; onClose: () => void; onSuccess: () => void }) {
     const [form, setForm] = useState({
         quantity: 0,
-        type: 'PURCHASE',
+        type: AdjustmentType.PURCHASE,
         reason: '',
     });
+    const [errors, setErrors] = useState<Record<string, string>>({});
 
     const mutation = useMutation({
         mutationFn: (data: { quantity: number; type: string; reason: string }) => inventoryService.adjust(item.id, data),
@@ -628,8 +647,12 @@ function StockAdjustmentForm({ item, onClose, onSuccess }: { item: InventoryItem
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (form.quantity === 0) {
-            toast.error('Quantity cannot be zero');
+        const errs: Record<string, string> = {};
+        if (form.quantity === 0) errs.quantity = 'Quantity cannot be zero';
+        if (!form.reason.trim()) errs.reason = 'Reason is required for audit tracking';
+
+        if (Object.keys(errs).length > 0) {
+            setErrors(errs);
             return;
         }
         mutation.mutate(form);
@@ -653,14 +676,13 @@ function StockAdjustmentForm({ item, onClose, onSuccess }: { item: InventoryItem
                         <label className="label-sm text-on-surface-variant">Adjustment Type</label>
                         <select
                             value={form.type}
-                            onChange={e => setForm({ ...form, type: e.target.value })}
+                            onChange={e => setForm({ ...form, type: e.target.value as AdjustmentType })}
                             className="input-field cursor-pointer"
                         >
-                            <option value="PURCHASE">Purchase (+)</option>
-                            <option value="RECOUNT">Recount (±)</option>
-                            <option value="WASTAGE">Wastage (-)</option>
-                            <option value="USAGE">Manual Usage (-)</option>
-                            <option value="SALE">Sale Correction (-)</option>
+                            <option value={AdjustmentType.PURCHASE}>Purchase (+)</option>
+                            <option value={AdjustmentType.AUDIT}>Manual Audit (±)</option>
+                            <option value={AdjustmentType.WASTE}>Wastage (-)</option>
+                            <option value={AdjustmentType.SALE}>Sale Correction (-)</option>
                         </select>
                     </div>
                     <div className="space-y-2">
@@ -670,22 +692,24 @@ function StockAdjustmentForm({ item, onClose, onSuccess }: { item: InventoryItem
                                 type="number"
                                 value={form.quantity}
                                 onChange={e => setForm({ ...form, quantity: parseFloat(e.target.value) || 0 })}
-                                className="input-field pr-12 text-center text-lg font-bold"
+                                className={cn("input-field pr-12 text-center text-lg font-bold", errors.quantity && "border-error focus:ring-error/20")}
                                 step="0.1"
                             />
                             <span className="absolute right-4 top-1/2 -translate-y-1/2 text-on-surface-variant label-sm">{item.unit}</span>
                         </div>
+                        {errors.quantity && <p className="text-xs text-error mt-1">{errors.quantity}</p>}
                     </div>
                 </div>
 
                 <div className="space-y-2">
-                    <label className="label-sm text-on-surface-variant">Reason / Notes</label>
+                    <label className="label-sm text-on-surface-variant">Reason / Notes <span className="text-error">*</span></label>
                     <textarea
                         value={form.reason}
                         onChange={e => setForm({ ...form, reason: e.target.value })}
-                        className="input-field min-h-[100px] py-3"
-                        placeholder="Why are you making this adjustment?"
+                        className={cn("input-field min-h-[100px] py-3", errors.reason && "border-error focus:ring-error/20")}
+                        placeholder="Why are you making this adjustment? (e.g., Stock delivery #123, Spoiled produce)"
                     />
+                    {errors.reason && <p className="text-xs text-error">{errors.reason}</p>}
                 </div>
 
                 <div className="bg-surface-container-high rounded-xl p-4 flex items-center justify-between border border-outline-variant">

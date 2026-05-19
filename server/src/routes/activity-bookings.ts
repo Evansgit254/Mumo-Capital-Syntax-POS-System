@@ -30,40 +30,52 @@ router.post('/', bookingLimiter, async (req, res) => {
 
         const data = bookingSchema.parse(req.body);
 
-        // FIX 4 — CODEX-CRIT-004: Database-level tenant scoping via findFirst
-        const activity = await prisma.activity.findFirst({
-            where: { id: data.activityId, tenantId }
-        });
+        // DEEP-CRIT-010: Atomic slot check + decrement + booking inside transaction
+        const booking = await prisma.$transaction(async (tx) => {
+            // Atomic: only decrement if slots > 0 AND activity belongs to tenant
+            const slotUpdate = await tx.activity.updateMany({
+                where: {
+                    id: data.activityId,
+                    tenantId,
+                    availableSlots: { gt: 0 }
+                },
+                data: { availableSlots: { decrement: 1 } }
+            });
 
-        if (!activity) {
-            return res.status(404).json({ error: 'Activity not found' });
-        }
+            if (slotUpdate.count === 0) {
+                // Distinguish between "not found" and "fully booked"
+                const activity = await tx.activity.findFirst({
+                    where: { id: data.activityId, tenantId },
+                    select: { availableSlots: true }
+                });
+                if (!activity) {
+                    throw Object.assign(new Error('Activity not found'), { statusCode: 404 });
+                }
+                throw Object.assign(
+                    new Error('No available slots for this activity'),
+                    { statusCode: 409 }
+                );
+            }
 
-        if (activity.availableSlots <= 0) {
-            return res.status(400).json({ error: 'Activity is fully booked' });
-        }
-
-        // FIX 4: Use updateMany with tenantId for slot decrement (database-level scoping)
-        const [booking, slotUpdate] = await prisma.$transaction([
-            prisma.activityBooking.create({
+            // Create the booking only after slot was successfully reserved
+            return tx.activityBooking.create({
                 data: {
                     tenantId,
                     activityId: data.activityId,
                     roomNumber: data.roomNumber,
                     guestName: data.guestName,
-                    slotTime: new Date(data.slotTime)
+                    slotTime: new Date(data.slotTime),
                 }
-            }),
-            prisma.activity.updateMany({
-                where: { id: data.activityId, tenantId },
-                data: { availableSlots: { decrement: 1 } }
-            })
-        ]);
+            });
+        });
 
         res.status(201).json(booking);
-    } catch (error) {
+    } catch (error: any) {
         if (error instanceof z.ZodError) {
             return res.status(400).json({ error: 'Validation failed', details: error.errors });
+        }
+        if (error.statusCode) {
+            return res.status(error.statusCode).json({ error: error.message });
         }
         logger.error({ err: error }, 'Booking error');
         res.status(500).json({ error: 'Failed to process booking' });

@@ -179,6 +179,8 @@ model OrderItem {
   quantity   Int
   unitPrice  Decimal  @db.Decimal(10, 2)
   subtotal   Decimal  @db.Decimal(10, 2)
+  notes      String?
+  modifiers  String[]
   menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
   order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
 

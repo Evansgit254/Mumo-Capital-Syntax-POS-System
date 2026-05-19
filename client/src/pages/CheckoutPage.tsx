@@ -1,7 +1,9 @@
 import { useState, useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { orderService, paymentService, tableService } from '../api/service';
+import { orderService, paymentService, tableService, tenantService } from '../api/service';
 import { useStore } from '../store/useStore';
+import { useQuery } from '@tanstack/react-query';
+import { formatCurrency } from '../lib/formatCurrency';
 import { 
     CreditCard, 
     Banknote, 
@@ -22,49 +24,29 @@ export default function CheckoutPage() {
     const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'CARD'>('CARD');
     const [isSuccess, setIsSuccess] = useState(false);
 
+    const settingsQuery = useQuery({
+        queryKey: ['tenant-settings'],
+        queryFn: () => tenantService.getSettings(),
+    });
+
     // Retrieve any order notes passed from POS page
     const orderNote = (location.state as { orderNote?: string } | null)?.orderNote || '';
+
+    // DEEP-CRIT-009: Detect if we're settling an existing table (vs POS cart flow)
+    const settleState = location.state as { settleTableId?: string; orderIds?: string[]; totalAmount?: number } | null;
+    const isTableSettle = !!(settleState?.settleTableId && settleState?.orderIds?.length);
 
     // Snapshot cart data on mount so clearCart() doesn't zero out display
     const cartSnapshot = useMemo(() => ({
         items: cart.items,
         tableId: cart.tableId,
         totalAmount: cart.items.reduce((sum, item) => sum + item.subtotal, 0),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     }), []); // intentionally empty deps — snapshot on mount only
 
-    const totalAmount = cartSnapshot.totalAmount;
+    const totalAmount = isTableSettle ? (settleState!.totalAmount ?? 0) : cartSnapshot.totalAmount;
 
-    // Redirect to POS if there's nothing in the cart
-    if (cartSnapshot.items.length === 0 && !isSuccess) {
-        return (
-            <div className="h-full flex flex-col items-center justify-center p-6">
-                <ShoppingBag size={64} className="text-on-surface-variant/20 mb-4" />
-                <h2 className="headline-md mb-2">No items to settle</h2>
-                <p className="body-md text-on-surface-variant mb-8">Add items from the POS before proceeding to checkout.</p>
-                <button onClick={() => navigate('/pos')} className="btn-primary h-14 px-8">
-                    <ArrowRight size={20} />
-                    <span>Go to POS</span>
-                </button>
-            </div>
-        );
-    }
-
+    // DEEP-CRIT-008: ALL hooks must be declared before any conditional returns
     // Step 1: Create order on server, Step 2: Create payment
-    const orderMutation = useMutation({
-        mutationFn: orderService.create,
-        onSuccess: (order) => {
-            paymentMutation.mutate({
-                orderId: order.id,
-                amount: totalAmount,
-                method: paymentMethod,
-            });
-        },
-        onError: () => {
-            toast.error('Failed to create order. Please try again.');
-        }
-    });
-
     const paymentMutation = useMutation({
         mutationFn: paymentService.create,
         onSuccess: () => {
@@ -94,13 +76,88 @@ export default function CheckoutPage() {
         }
     });
 
+    const orderMutation = useMutation({
+        mutationFn: orderService.create,
+        onSuccess: (order) => {
+            paymentMutation.mutate({
+                orderId: order.id,
+                amount: totalAmount,
+                method: paymentMethod,
+            });
+        },
+        onError: () => {
+            toast.error('Failed to create order. Please try again.');
+        }
+    });
+
     const handleConfirm = () => {
-        if (cartSnapshot.items.length === 0) return;
-        orderMutation.mutate({
-            tableId: cartSnapshot.tableId || undefined,
-            items: cartSnapshot.items.map(i => ({ menuItemId: i.menuItemId, quantity: i.quantity }))
-        });
+        if (isTableSettle) {
+            // DEEP-CRIT-009: Settle existing table orders
+            settleTableMutation.mutate();
+        } else {
+            // Standard POS cart flow
+            if (cartSnapshot.items.length === 0) return;
+            orderMutation.mutate({
+                tableId: cartSnapshot.tableId || undefined,
+                items: cartSnapshot.items.map(i => ({ 
+                    menuItemId: i.menuItemId, 
+                    quantity: i.quantity,
+                    notes: i.notes || null,
+                    modifiers: i.modifiers || []
+                }))
+            });
+        }
     };
+
+    // DEEP-CRIT-009: Table settlement mutation — settles existing orders without creating duplicates
+    const settleTableMutation = useMutation({
+        mutationFn: async () => {
+            const tableId = settleState!.settleTableId!;
+            const orderIds = settleState!.orderIds!;
+            const amount = settleState!.totalAmount!;
+
+            // Create payment records for each existing order
+            for (const orderId of orderIds) {
+                await paymentService.create({
+                    orderId,
+                    amount: amount / orderIds.length,
+                    method: paymentMethod,
+                });
+            }
+
+            // Mark table as available
+            await tableService.settle(tableId);
+        },
+        onSuccess: () => {
+            setIsSuccess(true);
+            queryClient.invalidateQueries({ queryKey: ['orders'] });
+            queryClient.invalidateQueries({ queryKey: ['tables'] });
+            if (settleState?.settleTableId) {
+                queryClient.invalidateQueries({ queryKey: ['table', settleState.settleTableId] });
+                queryClient.invalidateQueries({ queryKey: ['table-orders', settleState.settleTableId] });
+            }
+            queryClient.invalidateQueries({ queryKey: ['orders-live'] });
+        },
+        onError: () => {
+            toast.error('Failed to settle table. Please try again.');
+        }
+    });
+
+    // Conditional renders AFTER all hooks are declared
+    // Redirect to POS if there's nothing in the cart AND not a table settle flow
+    if (!isTableSettle && cartSnapshot.items.length === 0 && !isSuccess) {
+        return (
+            <div className="h-full flex flex-col items-center justify-center p-6">
+                <ShoppingBag size={64} className="text-on-surface-variant/20 mb-4" />
+                <h2 className="headline-md mb-2">No items to settle</h2>
+                <p className="body-md text-on-surface-variant mb-8">Add items from the POS before proceeding to checkout.</p>
+                <button onClick={() => navigate('/pos')} className="btn-primary h-14 px-8">
+                    <ArrowRight size={20} />
+                    <span>Go to POS</span>
+                </button>
+            </div>
+        );
+    }
 
     if (isSuccess) {
         return (
@@ -153,17 +210,24 @@ export default function CheckoutPage() {
                         </h2>
                         <div className="card-default border-outline-variant/30 divide-y divide-outline-variant/20 p-0 overflow-hidden">
                             <div className="max-h-[400px] overflow-y-auto p-6 space-y-4">
-                                {cartSnapshot.items.map(item => (
-                                    <div key={item.menuItemId} className="flex justify-between items-center group">
-                                        <div className="flex items-center gap-4">
-                                            <div className="h-10 w-10 rounded-lg bg-surface-container flex items-center justify-center font-bold text-xs text-secondary">
-                                                {item.quantity}x
-                                            </div>
-                                            <span className="body-md font-medium text-on-surface">{item.name}</span>
-                                        </div>
-                                        <span className="body-md font-bold text-on-surface-variant tabular-nums">{(item.subtotal).toLocaleString()} KES</span>
+                                {isTableSettle ? (
+                                    <div className="text-center py-4">
+                                        <p className="body-md text-on-surface-variant">Settling {settleState!.orderIds!.length} existing order(s) for this table</p>
+                                        <p className="headline-md text-secondary mt-2">{formatCurrency(totalAmount, settingsQuery.data?.currency)}</p>
                                     </div>
-                                ))}
+                                ) : (
+                                    cartSnapshot.items.map(item => (
+                                        <div key={item.menuItemId} className="flex justify-between items-center group">
+                                            <div className="flex items-center gap-4">
+                                                <div className="h-10 w-10 rounded-lg bg-surface-container flex items-center justify-center font-bold text-xs text-secondary">
+                                                    {item.quantity}x
+                                                </div>
+                                                <span className="body-md font-medium text-on-surface">{item.name}</span>
+                                            </div>
+                                            <span className="body-md font-bold text-on-surface-variant tabular-nums">{formatCurrency(item.subtotal, settingsQuery.data?.currency)}</span>
+                                        </div>
+                                    ))
+                                )}
                             </div>
 
                             {/* Order Note */}
@@ -177,15 +241,15 @@ export default function CheckoutPage() {
                             <div className="p-6 bg-surface-container-high/30 space-y-3">
                                 <div className="flex justify-between body-md">
                                     <span className="text-on-surface-variant">Subtotal</span>
-                                    <span className="text-on-surface font-semibold">{totalAmount.toLocaleString()} KES</span>
+                                    <span className="text-on-surface font-semibold">{formatCurrency(totalAmount, settingsQuery.data?.currency)}</span>
                                 </div>
                                 <div className="flex justify-between body-md">
                                     <span className="text-on-surface-variant">Service Charge (0%)</span>
-                                    <span className="text-on-surface font-semibold">0 KES</span>
+                                    <span className="text-on-surface font-semibold">{formatCurrency(0, settingsQuery.data?.currency)}</span>
                                 </div>
                                 <div className="pt-3 border-t border-outline-variant flex justify-between items-end">
                                     <span className="headline-md !text-[18px]">Payable Amount</span>
-                                    <span className="headline-md !text-[28px] text-secondary tabular-nums">{totalAmount.toLocaleString()} KES</span>
+                                    <span className="headline-md !text-[28px] text-secondary tabular-nums">{formatCurrency(totalAmount, settingsQuery.data?.currency)}</span>
                                 </div>
                             </div>
                         </div>
@@ -229,7 +293,7 @@ export default function CheckoutPage() {
                         <div className="pt-8">
                             <button 
                                 onClick={handleConfirm}
-                                disabled={orderMutation.isPending || paymentMutation.isPending || cartSnapshot.items.length === 0}
+                                disabled={orderMutation.isPending || paymentMutation.isPending || settleTableMutation.isPending || (!isTableSettle && cartSnapshot.items.length === 0)}
                                 className="btn-primary w-full !h-16 text-lg tracking-wider"
                             >
                                 {orderMutation.isPending || paymentMutation.isPending ? (

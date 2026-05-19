@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma';
-import { notFound, badRequest } from '../lib/errors';
+import { notFound, badRequest, conflict } from '../lib/errors';
 import { validate } from '../middleware/validate';
 import { requireRole } from '../middleware/requireRole';
 import {
@@ -268,7 +268,7 @@ staffReservationRouter.delete(
 );
 
 // ── POST /api/reservations/:id/checkin ──────────────────────────────────────
-// FIX 2 — CODEX-CRIT-002: Check-in requires authentication + staff role
+// DEEP-CRIT-007: Atomic check-in — prevents double check-in race condition
 staffReservationRouter.post(
     '/:id/checkin',
     requireRole(Role.MANAGER, Role.STAFF, Role.TENANT_ADMIN),
@@ -277,34 +277,44 @@ staffReservationRouter.post(
         try {
             const { tenantId } = req.user!;
 
-            const reservation = await prisma.reservation.findFirst({
-                where: { id: req.params.id, tenantId },
-            });
-            if (!reservation) throw notFound('Reservation not found');
-
-            if (reservation.status === ReservationStatus.CANCELLED) {
-                throw badRequest('Cannot check in a cancelled reservation');
-            }
-            if (reservation.status === ReservationStatus.SEATED) {
-                throw badRequest('Guest is already seated');
-            }
-
-            // Use transaction for atomic check-in
             const updated = await prisma.$transaction(async (tx) => {
-                const upd = await tx.reservation.update({
+                // Atomic status check and update — only one request can succeed
+                const result = await tx.reservation.updateMany({
+                    where: {
+                        id: req.params.id,
+                        tenantId,
+                        status: { notIn: [ReservationStatus.CANCELLED, ReservationStatus.SEATED] }
+                    },
+                    data: { status: ReservationStatus.SEATED }
+                });
+
+                if (result.count === 0) {
+                    // Check if reservation exists at all for a better error message
+                    const exists = await tx.reservation.findFirst({
+                        where: { id: req.params.id, tenantId },
+                        select: { status: true }
+                    });
+                    if (!exists) throw notFound('Reservation not found');
+                    throw conflict(
+                        'Reservation cannot be checked in — it may already be checked in or cancelled'
+                    );
+                }
+
+                // Get the reservation to find tableId and return full object
+                const reservation = await tx.reservation.findUnique({
                     where: { id: req.params.id },
-                    data: { status: ReservationStatus.SEATED },
                     include: { table: true },
                 });
 
                 // If the reservation has a table, mark it as occupied
-                if (upd.tableId) {
+                if (reservation?.tableId) {
                     await tx.table.update({
-                        where: { id: upd.tableId },
+                        where: { id: reservation.tableId },
                         data: { isOccupied: true },
                     });
                 }
-                return upd;
+
+                return reservation;
             });
 
             res.json(updated);

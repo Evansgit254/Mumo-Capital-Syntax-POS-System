@@ -51,23 +51,18 @@ export default function TableDetailsPage() {
     };
 
     const handleCloseTable = () => {
-        // Load all items from all active orders into cart for checkout
-        cart.clearCart();
-        cart.setTableId(id!);
-        
-        ordersQuery.data?.forEach(order => {
-            order.items?.forEach(item => {
-                cart.addItem({
-                    menuItemId: item.menuItemId,
-                    quantity: item.quantity,
-                    unitPrice: item.unitPrice,
-                    subtotal: item.subtotal,
-                    name: (item as any).menuItem?.name || 'Item',
-                });
-            });
-        });
+        // DEEP-CRIT-009: Do NOT load items into cart (that creates duplicate orders).
+        // Instead, pass existing order IDs to checkout for direct settlement.
+        const orderIds = activeOrders.map(o => o.id);
+        const totalAmount = activeOrders.reduce((sum, o) => sum + Number(o.totalAmount), 0);
 
-        navigate('/checkout');
+        navigate('/checkout', { 
+            state: { 
+                settleTableId: id, 
+                orderIds,
+                totalAmount,
+            } 
+        });
     };
 
     const transferMutation = useMutation({

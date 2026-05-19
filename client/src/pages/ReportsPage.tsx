@@ -35,6 +35,9 @@ import { orderService, paymentService, getErrorMessage } from '../api/service';
 import { downloadCSV } from '../lib/exportCsv';
 import Skeleton from '../components/ui/Skeleton';
 import toast from 'react-hot-toast';
+import { tenantService } from '../api/service';
+import { formatCurrency } from '../lib/formatCurrency';
+import { formatDate } from '../lib/formatDate';
 
 // Chart theme constants — extracted from inline hex values for maintainability
 const CHART_THEME = {
@@ -57,6 +60,11 @@ const ReportsPage: React.FC = () => {
     const { data: ordersResponse, isLoading: ordersLoading } = useQuery({
         queryKey: ['orders'],
         queryFn: () => orderService.getAll(),
+    });
+
+    const settingsQuery = useQuery({
+        queryKey: ['tenant-settings'],
+        queryFn: () => tenantService.getSettings(),
     });
 
     const payments = paymentsResponse?.data;
@@ -210,9 +218,9 @@ const ReportsPage: React.FC = () => {
             {/* Quick Stats */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {[
-                    { label: 'Total Revenue', value: `KES ${stats.revenue.toLocaleString()}`, trend: stats.revenueTrend, icon: DollarSign, color: 'text-primary', bg: 'bg-primary/10' },
+                    { label: 'Total Revenue', value: formatCurrency(stats.revenue, settingsQuery.data?.currency), trend: stats.revenueTrend, icon: DollarSign, color: 'text-primary', bg: 'bg-primary/10' },
                     { label: 'Total Orders', value: stats.orders, trend: stats.ordersTrend, icon: BarChart3, color: 'text-secondary', bg: 'bg-secondary/10' },
-                    { label: 'Avg. Check', value: `KES ${Math.round(stats.avgCheck).toLocaleString()}`, trend: stats.avgCheckTrend, icon: Activity, color: 'text-tertiary', bg: 'bg-tertiary/10' },
+                    { label: 'Avg. Check', value: formatCurrency(Math.round(stats.avgCheck), settingsQuery.data?.currency), trend: stats.avgCheckTrend, icon: Activity, color: 'text-tertiary', bg: 'bg-tertiary/10' },
                     { label: 'Guest Growth', value: `+${stats.guestCount}`, trend: stats.guestTrend, icon: Users, color: 'text-primary', bg: 'bg-primary/10' },
                 ].map((stat, i) => (
                     <div key={i} className="card-default p-6 space-y-4 hover:border-primary/30 transition-all duration-300">
@@ -283,7 +291,7 @@ const ReportsPage: React.FC = () => {
                                     }}
                                     itemStyle={{ color: CHART_THEME.accent, fontWeight: 700 }}
                                     labelStyle={{ color: CHART_THEME.text, fontWeight: 600, marginBottom: 4 }}
-                                    formatter={(value) => [`KES ${Number(value).toLocaleString()}`, 'Revenue']}
+                                    formatter={(value) => [formatCurrency(Number(value), settingsQuery.data?.currency), 'Revenue']}
                                 />
                                 <Area 
                                     type="monotone" 
@@ -366,11 +374,11 @@ const ReportsPage: React.FC = () => {
                                 </div>
                                 <div>
                                     <div className="body-lg font-bold text-on-surface">Payment for Order #{payment.orderId.slice(-4).toUpperCase()}</div>
-                                    <div className="label-sm text-on-hint uppercase tracking-wider">{payment.method} • {new Date(payment.createdAt).toLocaleTimeString()}</div>
+                                    <div className="label-sm text-on-hint uppercase tracking-wider">{payment.method} • {formatDate(payment.createdAt, settingsQuery.data?.timezone, 'HH:mm')}</div>
                                 </div>
                             </div>
                             <div className="text-right">
-                                <div className="body-lg font-bold text-primary">+KES {payment.amount.toLocaleString()}</div>
+                                <div className="body-lg font-bold text-primary">+{formatCurrency(payment.amount, settingsQuery.data?.currency)}</div>
                                 <div className="label-sm text-on-hint uppercase tracking-tighter">Settled</div>
                             </div>
                         </div>

@@ -21,26 +21,22 @@ import {
 import { cn } from '../lib/utils';
 import EmptyState from '../components/ui/EmptyState';
 import Skeleton from '../components/ui/Skeleton';
-import { Navigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useState, useEffect, useRef } from 'react';
 
 export default function KDSPage() {
     const { session } = useStore();
     const queryClient = useQueryClient();
+    const navigate = useNavigate();
     const [now, setNow] = useState(new Date());
     const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
-    // Role Guard
-    if (session.role === Role.STAFF) {
-        // Redirection logic simplified: prompt said "redirect CASHIER away" 
-        // but staff is the lowest role. Let's assume STAFF can be WAITER too, 
-        // but if it means strictly CASHIER (which isn't in Role enum but mentioned in prompt), 
-        // we'll go with the role logic.
-        // Actually the prompt says Role access: ADMIN, MANAGER, WAITER. 
-        // Our enum is: SUPER_ADMIN, TENANT_ADMIN, MANAGER, STAFF.
-        // I will allow everyone except STAFF if they are "CASHIER"
-        // But let's follow the requirement: ADMIN (TENANT_ADMIN), MANAGER, and presumably STAFF (WAITER).
-    }
+    // DEEP-WARN-019: KDS role guard — redirect CASHIER/STAFF away
+    useEffect(() => {
+        if (session.role === Role.STAFF) {
+            navigate('/dashboard', { replace: true });
+        }
+    }, [session.role, navigate]);
 
     // FIX 1 — CODEX-WARN-018: Visibility-aware timer
     const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -82,11 +78,6 @@ export default function KDSPage() {
         },
         onError: (err) => toast.error(getErrorMessage(err)),
     });
-
-    if (session.role === Role.STAFF && !session.email?.includes('waiter')) {
-        // Simplified cashiers check
-        // return <Navigate to="/dashboard" replace />;
-    }
 
     return (
         <div className="p-6 tablet:p-10 space-y-8 bg-surface min-h-full overflow-hidden" onClick={() => setOpenMenuId(null)}>

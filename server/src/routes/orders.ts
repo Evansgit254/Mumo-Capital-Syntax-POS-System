@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { notFound, badRequest } from '../lib/errors';
+import { notFound, badRequest, conflict } from '../lib/errors';
 import { validate } from '../middleware/validate';
 import { requireRole } from '../middleware/requireRole';
 import { createOrderSchema, updateOrderStatusSchema } from '../validators/order';
@@ -28,7 +28,7 @@ router.post('/external', async (req: Request, res: Response, next: NextFunction)
         }
 
         const priceMap = new Map(menuItems.map((m) => [m.id, m.price]));
-        const orderItems = items.map((item: { menuItemId: string; quantity: number }) => {
+        const orderItems = items.map((item: { menuItemId: string; quantity: number, notes?: string, modifiers?: string[] }) => {
             const unitPrice = priceMap.get(item.menuItemId)!;
             const subtotal = unitPrice.times(item.quantity).toDecimalPlaces(2);
             return {
@@ -36,6 +36,8 @@ router.post('/external', async (req: Request, res: Response, next: NextFunction)
                 quantity: item.quantity,
                 unitPrice,
                 subtotal,
+                notes: item.notes || null,
+                modifiers: item.modifiers || []
             };
         });
 
@@ -211,53 +213,68 @@ router.post(
             const { tenantId, id: userId } = req.user!;
             const { tableId, items } = req.body;
 
-            // Validate table belongs to tenant if provided
-            if (tableId) {
-                const table = await prisma.table.findFirst({
-                    where: { id: tableId, tenantId },
+            // DEEP-CRIT-005: Wrap table check + order create + table update in single transaction
+            const order = await prisma.$transaction(async (tx) => {
+                // If table provided, lock and verify it's available
+                if (tableId) {
+                    const table = await tx.table.findFirst({
+                        where: { id: tableId, tenantId, isOccupied: false },
+                    });
+                    if (!table) throw conflict('Table is not available or already occupied');
+                }
+
+                // Fetch menu items to get current prices — prevents price manipulation
+                const menuItemIds = items.map((i: { menuItemId: string }) => i.menuItemId);
+                const menuItems = await tx.menuItem.findMany({
+                    where: { id: { in: menuItemIds }, tenantId },
                 });
-                if (!table) throw notFound('Table not found in this tenant');
-            }
 
-            // Fetch menu items to get current prices — prevents price manipulation
-            const menuItemIds = items.map((i: { menuItemId: string }) => i.menuItemId);
-            const menuItems = await prisma.menuItem.findMany({
-                where: { id: { in: menuItemIds }, tenantId },
-            });
+                if (menuItems.length !== menuItemIds.length) {
+                    throw badRequest('One or more menu items not found in this tenant');
+                }
 
-            if (menuItems.length !== menuItemIds.length) {
-                throw badRequest('One or more menu items not found in this tenant');
-            }
+                const priceMap = new Map(menuItems.map((m) => [m.id, m.price]));
 
-            const priceMap = new Map(menuItems.map((m) => [m.id, m.price]));
+                // Calculate line items from server-side prices
+                const orderItems = items.map((item: { menuItemId: string; quantity: number, notes?: string, modifiers?: string[] }) => {
+                    const unitPrice = priceMap.get(item.menuItemId)!;
+                    const subtotal = unitPrice.times(item.quantity).toDecimalPlaces(2);
+                    return {
+                        menuItemId: item.menuItemId,
+                        quantity: item.quantity,
+                        unitPrice,
+                        subtotal,
+                        notes: item.notes || null,
+                        modifiers: item.modifiers || []
+                    };
+                });
 
-            // Calculate line items from server-side prices
-            const orderItems = items.map((item: { menuItemId: string; quantity: number }) => {
-                const unitPrice = priceMap.get(item.menuItemId)!;
-                const subtotal = unitPrice.times(item.quantity).toDecimalPlaces(2);
-                return {
-                    menuItemId: item.menuItemId,
-                    quantity: item.quantity,
-                    unitPrice,
-                    subtotal,
-                };
-            });
+                const totalAmount = orderItems.reduce(
+                    (sum: Prisma.Decimal, oi: LooseValue) => sum.plus(oi.subtotal),
+                    new Prisma.Decimal(0)
+                ).toDecimalPlaces(2);
 
-            const totalAmount = orderItems.reduce(
-                (sum: Prisma.Decimal, oi: LooseValue) => sum.plus(oi.subtotal),
-                new Prisma.Decimal(0)
-            ).toDecimalPlaces(2);
+                const created = await tx.order.create({
+                    data: {
+                        tenantId,
+                        userId,
+                        tableId: tableId || null,
+                        status: OrderStatus.PENDING,
+                        totalAmount,
+                        items: { create: orderItems },
+                    },
+                    include: { items: true },
+                });
 
-            const order = await prisma.order.create({
-                data: {
-                    tenantId,
-                    userId,
-                    tableId: tableId || null,
-                    status: OrderStatus.PENDING,
-                    totalAmount,
-                    items: { create: orderItems },
-                },
-                include: { items: true },
+                // Mark table as occupied atomically
+                if (tableId) {
+                    await tx.table.update({
+                        where: { id: tableId },
+                        data: { isOccupied: true },
+                    });
+                }
+
+                return created;
             });
 
             const serialized = {

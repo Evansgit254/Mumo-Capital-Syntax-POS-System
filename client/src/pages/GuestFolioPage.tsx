@@ -10,6 +10,9 @@ import {
     CheckCircle2,
     Loader2
 } from 'lucide-react';
+import { tenantService } from '../api/service';
+import { formatCurrency } from '../lib/formatCurrency';
+import { formatDate } from '../lib/formatDate';
 
 export default function GuestFolioPage() {
     const { roomId } = useParams<{ roomId: string }>();
@@ -28,6 +31,11 @@ export default function GuestFolioPage() {
         queryKey: ['guest', roomId],
         queryFn: () => guestFolioService.getGuestById(roomId!),
         enabled: !!roomId,
+    });
+
+    const settingsQuery = useQuery({
+        queryKey: ['tenant-settings'],
+        queryFn: () => tenantService.getSettings(),
     });
 
     const checkoutMutation = useMutation({
@@ -117,13 +125,13 @@ export default function GuestFolioPage() {
                             <div className="flex justify-between gap-8 body-md text-on-surface-variant">
                                 <span>Check-in</span>
                                 <strong className="text-on-surface">
-                                    {guest?.startTime ? new Date(guest.startTime).toLocaleDateString() : 'Oct 12, 2023'}
+                                    {guest?.startTime ? formatDate(guest.startTime, settingsQuery.data?.timezone) : 'Oct 12, 2023'}
                                 </strong>
                             </div>
                             <div className="flex justify-between gap-8 body-md text-on-surface-variant">
                                 <span>Check-out</span>
                                 <strong className="text-on-surface">
-                                    {guest?.endTime ? new Date(guest.endTime).toLocaleDateString() : 'Oct 16, 2023'}
+                                    {guest?.endTime ? formatDate(guest.endTime, settingsQuery.data?.timezone) : 'Oct 16, 2023'}
                                 </strong>
                             </div>
                         </div>
@@ -140,7 +148,7 @@ export default function GuestFolioPage() {
                                     <div className="body-lg text-on-surface font-medium">Lunch Service - Table 14</div>
                                     <div className="body-md text-on-surface-variant">Oct 13, 14:20</div>
                                 </div>
-                                <div className="body-lg text-on-surface tabular-nums">$118.00</div>
+                                <div className="body-lg text-on-surface tabular-nums">{formatCurrency(118, settingsQuery.data?.currency)}</div>
                             </div>
                             
                             <div className="flex justify-between items-start py-3 group hover:bg-surface-variant/30 px-4 -mx-4 rounded-lg transition-colors">
@@ -148,7 +156,7 @@ export default function GuestFolioPage() {
                                     <div className="body-lg text-on-surface font-medium">Beverage Service - Cabana 4</div>
                                     <div className="body-md text-on-surface-variant">Oct 14, 11:15</div>
                                 </div>
-                                <div className="body-lg text-on-surface tabular-nums">$124.50</div>
+                                <div className="body-lg text-on-surface tabular-nums">{formatCurrency(124.5, settingsQuery.data?.currency)}</div>
                             </div>
 
                             <div className="flex justify-between items-start py-3 group hover:bg-surface-variant/30 px-4 -mx-4 rounded-lg transition-colors">
@@ -156,7 +164,7 @@ export default function GuestFolioPage() {
                                     <div className="body-lg text-on-surface font-medium">Private Sunset Charter</div>
                                     <div className="body-md text-on-surface-variant">Oct 15, 17:00</div>
                                 </div>
-                                <div className="body-lg text-on-surface tabular-nums">$1,200.00</div>
+                                <div className="body-lg text-on-surface tabular-nums">{formatCurrency(1200, settingsQuery.data?.currency)}</div>
                             </div>
 
                             <div className="flex justify-between items-start py-3 group hover:bg-surface-variant/30 px-4 -mx-4 rounded-lg transition-colors">
@@ -164,7 +172,7 @@ export default function GuestFolioPage() {
                                     <div className="body-lg text-on-surface font-medium text-secondary">Penthouse Suite (4 Nights)</div>
                                     <div className="body-md text-on-surface-variant">Oct 12 - Oct 16</div>
                                 </div>
-                                <div className="body-lg text-on-surface tabular-nums">$4,200.00</div>
+                                <div className="body-lg text-on-surface tabular-nums">{formatCurrency(4200, settingsQuery.data?.currency)}</div>
                             </div>
 
                             <div className="flex justify-between items-start py-3 group hover:bg-surface-variant/30 px-4 -mx-4 rounded-lg transition-colors">
@@ -172,7 +180,7 @@ export default function GuestFolioPage() {
                                     <div className="body-lg text-on-surface font-medium text-secondary">Resort Fees & Service</div>
                                     <div className="body-md text-on-surface-variant">Fixed daily rate</div>
                                 </div>
-                                <div className="body-lg text-on-surface tabular-nums">$600.00</div>
+                                <div className="body-lg text-on-surface tabular-nums">{formatCurrency(600, settingsQuery.data?.currency)}</div>
                             </div>
                         </div>
 
@@ -183,10 +191,10 @@ export default function GuestFolioPage() {
                                     <div className="body-lg text-on-surface">POS Order {order.id.slice(0,6)}</div>
                                     <div className="body-md text-on-surface-variant flex gap-2">
                                         <span className="pill-status bg-secondary/10 text-secondary border-none text-[10px]">RETAIL</span>
-                                        {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                        {formatDate(order.createdAt, settingsQuery.data?.timezone, 'HH:mm')}
                                     </div>
                                 </div>
-                                <div className="body-lg text-on-surface tabular-nums">${order.totalAmount.toFixed(2)}</div>
+                                <div className="body-lg text-on-surface tabular-nums">{formatCurrency(order.totalAmount, settingsQuery.data?.currency)}</div>
                             </div>
                         ))}
 
@@ -200,7 +208,7 @@ export default function GuestFolioPage() {
                                             <div className="h-2 w-2 rounded-full bg-secondary" />
                                             <span className="body-md text-on-surface">{payment.method} Payment</span>
                                         </div>
-                                        <span className="body-md font-bold text-secondary">-${payment.amount.toFixed(2)}</span>
+                                        <span className="body-md font-bold text-secondary">-{formatCurrency(payment.amount, settingsQuery.data?.currency)}</span>
                                     </div>
                                 ))}
                             </div>
@@ -210,16 +218,16 @@ export default function GuestFolioPage() {
                         <div className="bg-surface-container-low rounded-xl p-8 border border-outline-variant/30 space-y-4 shadow-sm mt-8">
                             <div className="flex justify-between items-center body-lg text-on-surface-variant">
                                 <span>Subtotal</span>
-                                <span>${(finalSubtotal).toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                                <span>{formatCurrency(finalSubtotal, settingsQuery.data?.currency)}</span>
                             </div>
                             <div className="flex justify-between items-center body-lg text-on-surface-variant border-b border-outline-variant/20 pb-4">
                                 <span>City Tax (2%)</span>
-                                <span>${(finalSubtotal * 0.02).toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+                                <span>{formatCurrency(finalSubtotal * 0.02, settingsQuery.data?.currency)}</span>
                             </div>
                             <div className="flex justify-between items-center pt-2">
                                 <span className="headline-md !text-[24px]">Total Balance Due</span>
                                 <span className="display-lg !text-[36px] text-secondary tabular-nums">
-                                    ${(finalTotalDue).toLocaleString(undefined, {minimumFractionDigits: 2})}
+                                    {formatCurrency(finalTotalDue, settingsQuery.data?.currency)}
                                 </span>
                             </div>
                         </div>
