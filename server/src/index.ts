@@ -147,60 +147,62 @@ async function syncSuperAdmin() {
 }
 
 // ── Startup ──────────────────────────────────────────────────────────────────
-const server = app.listen(port, async () => {
-    await syncSuperAdmin();
-    console.log(`\n🚀 Mumo POS Server running on http://localhost:${port}\n`);
-    console.log('Registered routes:');
-    console.log('  PUBLIC:');
-    console.log('    GET    /health');
-    console.log('    POST   /auth/register');
-    console.log('    POST   /auth/login');
-    console.log('    POST   /auth/refresh');
-    console.log('  PROTECTED (Bearer + x-tenant-id):');
-    console.log('    GET    /api/menus');
-    console.log('    GET    /api/menus/:id');
-    console.log('    POST   /api/menus');
-    console.log('    PUT    /api/menus/:id');
-    console.log('    DELETE /api/menus/:id');
-    console.log('    GET    /api/orders');
-    console.log('    GET    /api/orders/live          (KDS)');
-    console.log('    GET    /api/orders/:id');
-    console.log('    POST   /api/orders');
-    console.log('    PUT    /api/orders/:id/status');
-    console.log('    GET    /api/tables');
-    console.log('    GET    /api/tables/:id');
-    console.log('    GET    /api/tables/:id/orders');
-    console.log('    POST   /api/tables');
-    console.log('    PUT    /api/tables/:id');
-    console.log('    DELETE /api/tables/:id');
-    console.log('    GET    /api/payments');
-    console.log('    GET    /api/payments/:id');
-    console.log('    POST   /api/payments');
-    console.log('    PUT    /api/payments/:id/status');
-    console.log('    GET    /api/reservations');
-    console.log('    GET    /api/reservations/waitlist');
-    console.log('    GET    /api/reservations/:id');
-    console.log('    POST   /api/reservations');
-    console.log('    PUT    /api/reservations/:id');
-    console.log('    DELETE /api/reservations/:id');
-    console.log('    POST   /api/reservations/:id/checkin');
-    console.log('    GET    /api/customers');
-    console.log('    GET    /api/customers/:id');
-    console.log('    POST   /api/customers');
-    console.log('    PUT    /api/customers/:id');
-    console.log('    POST   /api/discounts/redeem');
-    console.log('    GET    /api/inventory');
-    console.log('    GET    /api/inventory/:id');
-    console.log('    POST   /api/inventory');
-    console.log('    PUT    /api/inventory/:id');
-    console.log('    DELETE /api/inventory/:id');
-    console.log('    POST   /api/inventory/:id/adjust');
-    console.log('    GET    /api/tenants/settings');
-    console.log('    PUT    /api/tenants/settings');
-    console.log('    GET    /api/roles/:role/permissions');
-    console.log('    PUT    /api/roles/:role/permissions');
-    console.log('');
-});
+const server = process.env.NODE_ENV === 'test'
+    ? null
+    : app.listen(port, async () => {
+        await syncSuperAdmin();
+        console.log(`\n🚀 Mumo POS Server running on http://localhost:${port}\n`);
+        console.log('Registered routes:');
+        console.log('  PUBLIC:');
+        console.log('    GET    /health');
+        console.log('    POST   /auth/register');
+        console.log('    POST   /auth/login');
+        console.log('    POST   /auth/refresh');
+        console.log('  PROTECTED (Bearer + x-tenant-id):');
+        console.log('    GET    /api/menus');
+        console.log('    GET    /api/menus/:id');
+        console.log('    POST   /api/menus');
+        console.log('    PUT    /api/menus/:id');
+        console.log('    DELETE /api/menus/:id');
+        console.log('    GET    /api/orders');
+        console.log('    GET    /api/orders/live          (KDS)');
+        console.log('    GET    /api/orders/:id');
+        console.log('    POST   /api/orders');
+        console.log('    PUT    /api/orders/:id/status');
+        console.log('    GET    /api/tables');
+        console.log('    GET    /api/tables/:id');
+        console.log('    GET    /api/tables/:id/orders');
+        console.log('    POST   /api/tables');
+        console.log('    PUT    /api/tables/:id');
+        console.log('    DELETE /api/tables/:id');
+        console.log('    GET    /api/payments');
+        console.log('    GET    /api/payments/:id');
+        console.log('    POST   /api/payments');
+        console.log('    PUT    /api/payments/:id/status');
+        console.log('    GET    /api/reservations');
+        console.log('    GET    /api/reservations/waitlist');
+        console.log('    GET    /api/reservations/:id');
+        console.log('    POST   /api/reservations');
+        console.log('    PUT    /api/reservations/:id');
+        console.log('    DELETE /api/reservations/:id');
+        console.log('    POST   /api/reservations/:id/checkin');
+        console.log('    GET    /api/customers');
+        console.log('    GET    /api/customers/:id');
+        console.log('    POST   /api/customers');
+        console.log('    PUT    /api/customers/:id');
+        console.log('    POST   /api/discounts/redeem');
+        console.log('    GET    /api/inventory');
+        console.log('    GET    /api/inventory/:id');
+        console.log('    POST   /api/inventory');
+        console.log('    PUT    /api/inventory/:id');
+        console.log('    DELETE /api/inventory/:id');
+        console.log('    POST   /api/inventory/:id/adjust');
+        console.log('    GET    /api/tenants/settings');
+        console.log('    PUT    /api/tenants/settings');
+        console.log('    GET    /api/roles/:role/permissions');
+        console.log('    PUT    /api/roles/:role/permissions');
+        console.log('');
+    });
 
 // ── Static Assets (Client) ──────────────────────────────────────────────────
 if (process.env.NODE_ENV === 'production') {
@@ -219,6 +221,10 @@ if (process.env.NODE_ENV === 'production') {
 const shutdown = async (signal: string) => {
     logger.info(`${signal} received — shutting down gracefully`);
     clearInterval(cleanupInterval); // FIX 2 — CODEX-WARN-003: Clear cleanup interval on shutdown
+    if (!server) {
+        await prisma.$disconnect();
+        process.exit(0);
+    }
     server.close(async () => {
         await prisma.$disconnect();
         logger.info('Server closed and database disconnected');

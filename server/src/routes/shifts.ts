@@ -17,7 +17,10 @@ const createShiftSchema = z.object({
     startTime: z.string(), // ISO string
     endTime: z.string(), // ISO string
     station: z.string()
-});
+}).refine(
+    data => new Date(data.endTime) > new Date(data.startTime),
+    { message: 'End time must be after start time', path: ['endTime'] }
+);
 
 const updateShiftSchema = z.object({
     startTime: z.string().optional(),

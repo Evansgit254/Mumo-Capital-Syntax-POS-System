@@ -35,11 +35,13 @@ export default function DashboardPage() {
 
     const currency = settingsQuery.data?.currency || 'KES';
     
-    // Queries
     const activeOrdersQuery = useQuery({
         queryKey: ['orders-live'],
         queryFn: () => orderService.getLive(),
-        refetchInterval: 15000, // Frequent polling for live dashboard feel
+        refetchInterval: (query) => {
+            // DEEP-WARN-014: Only poll if tab is visible to save resources
+            return document.visibilityState === 'visible' ? 15000 : false;
+        },
     });
 
     const ordersQuery = useQuery({

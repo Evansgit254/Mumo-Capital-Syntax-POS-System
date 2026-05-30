@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { notFound, forbidden } from '../lib/errors';
+import { notFound, forbidden, badRequest } from '../lib/errors';
 import { validate } from '../middleware/validate';
 import { requireRole } from '../middleware/requireRole';
 import { createTableSchema, updateTableSchema, batchUpdateTablesSchema } from '../validators/table';
@@ -276,6 +277,95 @@ router.delete(
 
             await prisma.table.delete({ where: { id: req.params.id } });
             res.status(204).send();
+        } catch (err) {
+            next(err);
+        }
+    }
+);
+
+// ── POST /api/tables/:id/settle-orders ───────────────────────────────────────
+// FIX-004 (DEEP-CRIT-004): Transactional table settlement — replaces client-orchestrated multi-call
+router.post(
+    '/:id/settle-orders',
+    requireRole(Role.STAFF, Role.MANAGER, Role.TENANT_ADMIN, Role.SUPER_ADMIN),
+    async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const tenantId = req.user!.tenantId;
+            const tableId = req.params.id;
+            const { orderIds, method } = req.body;
+
+            if (!orderIds?.length) {
+                throw badRequest('No order IDs provided');
+            }
+
+            const result = await prisma.$transaction(async (tx) => {
+                const orders = await tx.order.findMany({
+                    where: {
+                        id: { in: orderIds },
+                        tenantId,
+                        tableId,
+                        status: { notIn: ['CANCELLED', 'PAID'] },
+                    },
+                    include: {
+                        payments: {
+                            where: { status: 'COMPLETED' },
+                        },
+                    },
+                });
+
+                if (orders.length !== new Set(orderIds).size) {
+                    throw badRequest('Invalid order selection');
+                }
+
+                const payments = [];
+                for (const order of orders) {
+                    const alreadyPaid = order.payments.reduce(
+                        (sum, p) => sum.plus(p.amount),
+                        new Prisma.Decimal(0)
+                    );
+                    const outstanding = order.totalAmount
+                        .minus(alreadyPaid)
+                        .toDecimalPlaces(2);
+
+                    if (outstanding.lte(0)) continue;
+
+                    const payment = await tx.payment.create({
+                        data: {
+                            tenantId,
+                            orderId: order.id,
+                            amount: outstanding,
+                            method,
+                            status: 'COMPLETED',
+                        },
+                    });
+                    payments.push(payment);
+
+                    await tx.order.update({
+                        where: { id: order.id },
+                        data: { status: 'PAID' },
+                    });
+                }
+
+                // Release table only if no unpaid orders remain
+                const unpaidCount = await tx.order.count({
+                    where: {
+                        tableId,
+                        tenantId,
+                        status: { notIn: ['PAID', 'CANCELLED'] },
+                    },
+                });
+
+                if (unpaidCount === 0) {
+                    await tx.table.updateMany({
+                        where: { id: tableId, tenantId },
+                        data: { isOccupied: false },
+                    });
+                }
+
+                return { settledOrders: orders.length, payments };
+            });
+
+            res.json(result);
         } catch (err) {
             next(err);
         }

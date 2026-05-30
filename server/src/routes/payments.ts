@@ -91,6 +91,40 @@ router.post(
                     })
                 ));
 
+                // FIX-007 (DEEP-CRIT-007): Mark fully-paid orders as PAID
+                for (const charge of charges) {
+                    const paidAgg = await tx.payment.aggregate({
+                        where: { orderId: charge.orderId, tenantId, status: PaymentStatus.COMPLETED },
+                        _sum: { amount: true },
+                    });
+                    const totalPaid = paidAgg._sum.amount ?? new Prisma.Decimal(0);
+                    const order = await tx.order.findUnique({
+                        where: { id: charge.orderId },
+                        select: { totalAmount: true },
+                    });
+                    if (order && totalPaid.gte(order.totalAmount)) {
+                        await tx.order.update({
+                            where: { id: charge.orderId },
+                            data: { status: OrderStatus.PAID },
+                        });
+                    }
+                }
+
+                // FIX-007: Release room if no unpaid orders remain
+                const unpaidRoom = await tx.order.count({
+                    where: {
+                        tableId: roomId,
+                        tenantId,
+                        status: { notIn: [OrderStatus.PAID, OrderStatus.CANCELLED] },
+                    },
+                });
+                if (unpaidRoom === 0) {
+                    await tx.table.updateMany({
+                        where: { id: roomId, tenantId },
+                        data: { isOccupied: false },
+                    });
+                }
+
                 const totalSettled = payments.reduce(
                     (sum, payment) => sum.plus(payment.amount),
                     new Prisma.Decimal(0)
@@ -164,42 +198,54 @@ router.post(
             });
             if (!order) throw notFound('Order not found in this tenant');
 
-            if (new Prisma.Decimal(amount).greaterThan(order.totalAmount)) {
-                throw badRequest('Payment amount exceeds order total');
-            }
-
-            // FIX 7: Atomic transaction — create payment, update order, release table
+            // FIX-008 (DEEP-CRIT-015): Enforce outstanding balance — atomic transaction
             const result = await prisma.$transaction(async (tx) => {
+                // Calculate cumulative payments already made
+                const paidAgg = await tx.payment.aggregate({
+                    where: { orderId, tenantId, status: PaymentStatus.COMPLETED },
+                    _sum: { amount: true },
+                });
+                const alreadyPaid = paidAgg._sum.amount ?? new Prisma.Decimal(0);
+                const paymentAmount = new Prisma.Decimal(amount).toDecimalPlaces(2);
+                const outstanding = order.totalAmount.minus(alreadyPaid).toDecimalPlaces(2);
+
+                if (paymentAmount.gt(outstanding)) {
+                    throw badRequest('Payment amount exceeds outstanding balance');
+                }
+
                 const payment = await tx.payment.create({
                     data: {
                         tenantId,
                         orderId,
-                        amount: new Prisma.Decimal(amount),
+                        amount: paymentAmount,
                         method,
                         status: PaymentStatus.COMPLETED,
                     },
                 });
 
-                // Mark order as PAID
-                await tx.order.updateMany({
-                    where: { id: orderId, tenantId },
-                    data: { status: OrderStatus.PAID },
-                });
-
-                // Release table only if all orders for that table are paid
-                if (order.tableId) {
-                    const openOrders = await tx.order.count({
-                        where: {
-                            tableId: order.tableId,
-                            tenantId,
-                            status: { not: 'PAID' },
-                        },
+                // Only mark PAID when fully paid
+                const totalPaid = alreadyPaid.plus(paymentAmount);
+                if (totalPaid.gte(order.totalAmount)) {
+                    await tx.order.updateMany({
+                        where: { id: orderId, tenantId },
+                        data: { status: OrderStatus.PAID },
                     });
-                    if (openOrders === 0) {
-                        await tx.table.updateMany({
-                            where: { id: order.tableId, tenantId },
-                            data: { isOccupied: false },
+
+                    // Release table if no unpaid orders remain
+                    if (order.tableId) {
+                        const unpaid = await tx.order.count({
+                            where: {
+                                tableId: order.tableId,
+                                tenantId,
+                                status: { notIn: [OrderStatus.PAID, OrderStatus.CANCELLED] },
+                            },
                         });
+                        if (unpaid === 0) {
+                            await tx.table.updateMany({
+                                where: { id: order.tableId, tenantId },
+                                data: { isOccupied: false },
+                            });
+                        }
                     }
                 }
 

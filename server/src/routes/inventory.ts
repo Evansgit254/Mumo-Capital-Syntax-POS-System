@@ -261,33 +261,37 @@ router.post(
             const itemId = req.params.id;
             const quantityDecimal = new Prisma.Decimal(quantity);
 
+            // FIX-002 (DEEP-CRIT-002): Conditional updateMany prevents concurrent reductions going negative
+            const reducing = [AdjustmentType.WASTE, AdjustmentType.SALE].includes(adjustmentType);
+
             const result = await prisma.$transaction(async (tx) => {
-                // Verify item exists and belongs to tenant
-                const item = await tx.inventoryItem.findFirst({
+                // Get previous stock for audit log context (before update)
+                const beforeItem = await tx.inventoryItem.findFirst({
                     where: { id: itemId, tenantId, deletedAt: null },
+                    select: { currentStock: true },
                 });
-                if (!item) throw notFound('Inventory item not found');
+                if (!beforeItem) throw notFound('Inventory item not found');
+                const previousQty = beforeItem.currentStock;
 
-                const previousStock = item.currentStock;
-
-                if (adjustmentType === AdjustmentType.WASTE) {
-                    // For reductions, verify sufficient stock inside the transaction
-                    if (item.currentStock.lessThan(quantityDecimal)) {
-                        throw badRequest(
-                            `Insufficient stock. Current: ${item.currentStock.toNumber()}, Requested: ${quantity}`
-                        );
-                    }
-                    // Atomic decrement — no read-modify-write
-                    await tx.inventoryItem.update({
-                        where: { id: itemId },
+                if (reducing) {
+                    const reduced = await tx.inventoryItem.updateMany({
+                        where: {
+                            id: itemId,
+                            tenantId,
+                            deletedAt: null,
+                            currentStock: { gte: quantityDecimal },
+                        },
                         data: { currentStock: { decrement: quantityDecimal } },
                     });
+                    if (reduced.count !== 1) {
+                        throw badRequest('Insufficient stock or inventory item not found');
+                    }
                 } else {
-                    // Atomic increment — no read-modify-write
-                    await tx.inventoryItem.update({
-                        where: { id: itemId },
+                    const increased = await tx.inventoryItem.updateMany({
+                        where: { id: itemId, tenantId, deletedAt: null },
                         data: { currentStock: { increment: quantityDecimal } },
                     });
+                    if (increased.count !== 1) throw notFound('Inventory item not found');
                 }
 
                 // Fetch updated stock for audit log and response
@@ -300,7 +304,7 @@ router.post(
                     data: {
                         tenantId,
                         inventoryItemId: itemId,
-                        previousQty: previousStock,
+                        previousQty,
                         newQty: updated!.currentStock,
                         adjustmentType,
                         reason,
@@ -308,7 +312,7 @@ router.post(
                     },
                 });
 
-                return { updated: updated!, previousStock };
+                return { updated: updated!, previousStock: previousQty };
             });
 
             res.json({

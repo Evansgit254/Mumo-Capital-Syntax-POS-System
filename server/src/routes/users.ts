@@ -4,7 +4,7 @@ import bcrypt from 'bcrypt';
 import { prisma } from '../lib/prisma';
 import { requireRole } from '../middleware/requireRole';
 import { validate } from '../middleware/validate';
-import { forbidden, notFound, badRequest } from '../lib/errors';
+import { forbidden, notFound, badRequest, conflict } from '../lib/errors';
 import { 
     createUserSchema, 
     updateRoleSchema, 
@@ -77,19 +77,22 @@ router.post(
             const { tenantId } = req.user!;
             const { email, firstName, lastName, password, hourlyRate } = req.body;
 
+            // FIX-011 (DEEP-WARN-013): Normalize email before storage
+            const normalizedEmail = email.trim().toLowerCase();
+
             // FIX 5 — CODEX-CRIT-005: Check uniqueness within tenant scope
             const existing = await prisma.user.findFirst({
-                where: { email: email.toLowerCase().trim(), tenantId }
+                where: { email: normalizedEmail, tenantId }
             });
             if (existing) {
-                throw forbidden('A user with this email already exists in this tenant');
+                throw conflict('A user with this email already exists in this tenant');
             }
 
             const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
 
             const user = await prisma.user.create({
                 data: {
-                    email,
+                    email: normalizedEmail,
                     firstName,
                     lastName,
                     role: Role.STAFF,

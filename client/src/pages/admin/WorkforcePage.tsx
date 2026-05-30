@@ -1,11 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { userService, shiftService, clockEventService } from '../../api/service';
+import { userService, shiftService, clockEventService, tenantService } from '../../api/service';
 import { Role } from '@mumo/types';
 import { Clock, Calendar as CalendarIcon, Users, DollarSign, Edit2, Check, X, Plus } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 import { format, startOfWeek, endOfWeek, addDays, isSameDay, differenceInMinutes } from 'date-fns';
 import FormField from '../../components/ui/FormField';
+import { useQuery } from '@tanstack/react-query';
+import { formatCurrency } from '../../lib/formatCurrency';
 
 export default function WorkforcePage() {
     const { session } = useStore();
@@ -28,6 +30,12 @@ export default function WorkforcePage() {
     const [selectedUserId, setSelectedUserId] = useState<string>('');
     const [selectedShift, setSelectedShift] = useState<any>(null);
     const [shiftForm, setShiftForm] = useState({ startTime: '', endTime: '', station: '' });
+
+    const { data: settings } = useQuery({
+        queryKey: ['tenant-settings'],
+        queryFn: () => tenantService.getSettings(),
+    });
+    const currency = settings?.currency || 'KES';
 
     useEffect(() => {
         fetchData();
@@ -106,6 +114,12 @@ export default function WorkforcePage() {
                     station: shiftForm.station
                 });
             } else {
+                // DEEP-WARN-020: Client-side time validation
+                if (shiftForm.startTime >= shiftForm.endTime) {
+                    toast.error('End time must be after start time');
+                    return;
+                }
+
                 await shiftService.create({
                     userId: selectedUserId,
                     date: format(selectedDate, 'yyyy-MM-dd'),
@@ -169,7 +183,7 @@ export default function WorkforcePage() {
                     </div>
                     <div>
                         <p className="label-sm text-on-surface-variant">Weekly Labor Cost</p>
-                        <p className="headline-md font-bold text-on-surface">KES {totalLaborCost.toLocaleString()}</p>
+                        <p className="headline-md font-bold text-on-surface">{formatCurrency(totalLaborCost, currency)}</p>
                     </div>
                 </div>
             </div>
@@ -309,7 +323,7 @@ export default function WorkforcePage() {
                                                 </div>
                                             ) : (
                                                 <div className="flex items-center justify-end gap-3">
-                                                    <span className="headline-sm font-bold text-on-surface">KES {user.hourlyRate?.toLocaleString()}</span>
+                                                    <span className="headline-sm font-bold text-on-surface">{formatCurrency(user.hourlyRate || 0, currency)}</span>
                                                     {isAdmin && (
                                                         <button 
                                                             onClick={() => { setEditingRateId(user.id); setTempRate((user.hourlyRate || 0).toString()); }}

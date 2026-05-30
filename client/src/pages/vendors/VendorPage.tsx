@@ -24,15 +24,18 @@ import {
 } from 'lucide-react';
 import { Vendor } from '@mumo/types';
 import { cn } from '../../lib/utils';
-import { vendorService, purchaseOrderService, inventoryService, getErrorMessage } from '../../api/service';
+import { vendorService, purchaseOrderService, inventoryService, getErrorMessage, tenantService } from '../../api/service';
 import Skeleton from '../../components/ui/Skeleton';
 import { toast } from 'react-hot-toast';
 import { format } from 'date-fns';
+import PurchaseOrderModal from '../../components/vendors/PurchaseOrderModal';
+import { formatCurrency } from '../../lib/formatCurrency';
 
 const VendorPage: React.FC = () => {
     const queryClient = useQueryClient();
     const [activeTab, setActiveTab] = useState<'vendors' | 'pos'>('vendors');
     const [isVendorModalOpen, setIsVendorModalOpen] = useState(false);
+    const [isPOModalOpen, setIsPOModalOpen] = useState(false);
     const [isPOConfirmModalOpen, setIsPOConfirmModalOpen] = useState(false);
     const [selectedPO, setSelectedPO] = useState<any>(null);
     const [receivedQtys, setReceivedQtys] = useState<Record<string, string>>({});
@@ -48,6 +51,13 @@ const VendorPage: React.FC = () => {
         queryKey: ['purchase-orders'],
         queryFn: () => purchaseOrderService.getAll(),
     });
+
+    const { data: settings } = useQuery({
+        queryKey: ['tenant-settings'],
+        queryFn: () => tenantService.getSettings(),
+    });
+
+    const tenantCurrency = settings?.currency || 'KES';
 
     const markReceivedMutation = useMutation({
         mutationFn: ({ id }: { id: string }) => {
@@ -104,7 +114,13 @@ const VendorPage: React.FC = () => {
                     <p className="body-lg text-on-surface-variant">Manage vendors and track purchase orders.</p>
                 </div>
                 <button 
-                    onClick={() => activeTab === 'vendors' ? setIsVendorModalOpen(true) : null}
+                    onClick={() => {
+                        if (activeTab === 'vendors') {
+                            setIsVendorModalOpen(true);
+                        } else {
+                            setIsPOModalOpen(true);
+                        }
+                    }}
                     className="btn-primary flex items-center gap-2 group self-start md:self-center"
                 >
                     <Plus size={20} />
@@ -215,19 +231,19 @@ const VendorPage: React.FC = () => {
                             <div className="text-center">Status</div>
                             <div className="text-right">Actions</div>
                         </div>
-                        {(purchaseOrders as any)?.data?.map((po: LooseValue) => (
+                        {purchaseOrders?.data?.map((po) => (
                             <div key={po.id} className="grid grid-cols-1 md:grid-cols-6 gap-4 md:gap-6 px-8 py-6 items-center hover:bg-surface-container-low/30 transition-colors">
                                 <div className="col-span-2 space-y-1">
                                      <div className="body-md font-bold text-on-surface">PO-{po.id.substring(0, 6).toUpperCase()}</div>
                                      <div className="flex items-center gap-2 text-on-surface-variant label-sm">
-                                         <Building2 size={12} /> Vendor ID: {po.vendorId.substring(0, 8)}
+                                         <Building2 size={12} /> {po.vendor?.name || `Vendor ID: ${po.vendorId.substring(0, 8)}`}
                                      </div>
                                 </div>
                                 <div className="text-center">
                                     <div className="body-md font-medium text-on-surface">{po.items?.length || 0} Items</div>
                                 </div>
                                 <div className="text-center">
-                                    <div className="body-md font-bold text-primary">KES {po.totalAmount?.toLocaleString() || 0}</div>
+                                    <div className="body-md font-bold text-primary">{formatCurrency(po.totalCost, tenantCurrency)}</div>
                                 </div>
                                 <div className="text-center">
                                     <span className={`label-sm px-3 py-1 rounded-full font-bold uppercase ${
@@ -272,6 +288,16 @@ const VendorPage: React.FC = () => {
                             setEditingVendor(null);
                             queryClient.invalidateQueries({ queryKey: ['vendors'] });
                         }}
+                    />
+                </div>
+            )}
+
+            {/* New Purchase Order Modal */}
+            {isPOModalOpen && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <PurchaseOrderModal 
+                        onClose={() => setIsPOModalOpen(false)}
+                        tenantCurrency={tenantCurrency}
                     />
                 </div>
             )}
@@ -327,7 +353,24 @@ const VendorPage: React.FC = () => {
                         <div className="p-8 bg-surface-container-low border-t border-outline-variant flex items-center justify-end gap-4">
                             <button onClick={() => setIsPOConfirmModalOpen(false)} className="btn-secondary">Cancel</button>
                             <button 
-                                onClick={() => markReceivedMutation.mutate({ id: selectedPO.id })}
+                                onClick={() => {
+                                    // DEEP-WARN-001: Receipt validation
+                                    const totalReceived = Object.values(receivedQtys).reduce((sum, val) => sum + parseFloat(val || '0'), 0);
+                                    if (totalReceived === 0) {
+                                        toast.error('At least one item must be received');
+                                        return;
+                                    }
+                                    
+                                    const hasOverage = selectedPO?.items?.some((item: any) => 
+                                        parseFloat(receivedQtys[item.id] || '0') > (item.orderedQty ?? 0)
+                                    );
+                                    if (hasOverage) {
+                                        toast.error('Received quantity cannot exceed ordered quantity');
+                                        return;
+                                    }
+
+                                    markReceivedMutation.mutate({ id: selectedPO.id });
+                                }}
                                 disabled={markReceivedMutation.isPending}
                                 className="btn-primary"
                             >

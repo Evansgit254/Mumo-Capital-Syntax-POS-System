@@ -5,6 +5,7 @@ export const createVendorSchema = z.object({
     contactName: z.string().optional(),
     email: z.string().email('Invalid email').optional().or(z.literal('')),
     phone: z.string().optional(),
+    address: z.string().optional(),
     categories: z.array(z.string()).optional().default([]),
 });
 

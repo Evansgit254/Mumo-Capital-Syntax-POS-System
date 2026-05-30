@@ -1,7 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { notFound } from '../lib/errors';
+import { notFound, badRequest } from '../lib/errors';
 import { validate } from '../middleware/validate';
 import { requireRole } from '../middleware/requireRole';
 import { Role } from '@mumo/types';
@@ -65,6 +65,7 @@ router.post(
                     contactName: req.body.contactName,
                     email: req.body.email,
                     phone: req.body.phone,
+                    address: req.body.address,
                     categories: req.body.categories ?? [],
                 },
             });
@@ -143,6 +144,26 @@ router.post(
                 where: { id: vendorId, tenantId }
             });
             if (!vendor) throw notFound('Vendor not found');
+
+            // FIX-003 (DEEP-CRIT-003): Verify all inventory items belong to tenant
+            const inventoryIds = [
+                ...new Set(
+                    items.map((item: { inventoryItemId: string }) => item.inventoryItemId)
+                )
+            ];
+
+            const validItems = await prisma.inventoryItem.findMany({
+                where: {
+                    id: { in: inventoryIds as string[] },
+                    tenantId,
+                    deletedAt: null,
+                },
+                select: { id: true },
+            });
+
+            if (validItems.length !== inventoryIds.length) {
+                throw notFound('One or more inventory items not found in this tenant');
+            }
 
             // Decimal arithmetic for total cost
             let totalCost = new Prisma.Decimal(0);
@@ -319,6 +340,7 @@ router.put(
                     contactName: req.body.contactName,
                     email: req.body.email,
                     phone: req.body.phone,
+                    address: req.body.address,
                     categories: req.body.categories,
                 },
             });

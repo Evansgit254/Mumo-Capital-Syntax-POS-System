@@ -47,16 +47,11 @@ export default function CheckoutPage() {
 
     // DEEP-CRIT-008: ALL hooks must be declared before any conditional returns
     // Step 1: Create order on server, Step 2: Create payment
+    // FIX-004: Removed fire-and-forget tableService.settle — server handles table release
     const paymentMutation = useMutation({
         mutationFn: paymentService.create,
         onSuccess: () => {
-            // Save tableId before clearing cart
             const tableId = cartSnapshot.tableId;
-
-            // Settle the table if this was a table order
-            if (tableId) {
-                tableService.settle(tableId);
-            }
 
             setIsSuccess(true);
             cart.clearCart();
@@ -68,7 +63,6 @@ export default function CheckoutPage() {
                 queryClient.invalidateQueries({ queryKey: ['table', tableId] });
                 queryClient.invalidateQueries({ queryKey: ['table-orders', tableId] });
             }
-            // Always invalidate KDS live orders
             queryClient.invalidateQueries({ queryKey: ['orders-live'] });
         },
         onError: () => {
@@ -109,24 +103,17 @@ export default function CheckoutPage() {
         }
     };
 
-    // DEEP-CRIT-009: Table settlement mutation — settles existing orders without creating duplicates
+    // FIX-004 (DEEP-CRIT-004): Transactional table settlement via single backend call
     const settleTableMutation = useMutation({
         mutationFn: async () => {
             const tableId = settleState!.settleTableId!;
             const orderIds = settleState!.orderIds!;
-            const amount = settleState!.totalAmount!;
 
-            // Create payment records for each existing order
-            for (const orderId of orderIds) {
-                await paymentService.create({
-                    orderId,
-                    amount: amount / orderIds.length,
-                    method: paymentMethod,
-                });
-            }
-
-            // Mark table as available
-            await tableService.settle(tableId);
+            // Single transactional call — server calculates outstanding per order
+            await tableService.settleOrders(tableId, {
+                orderIds,
+                method: paymentMethod,
+            });
         },
         onSuccess: () => {
             setIsSuccess(true);

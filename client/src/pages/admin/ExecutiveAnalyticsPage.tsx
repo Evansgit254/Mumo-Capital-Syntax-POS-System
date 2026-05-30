@@ -32,6 +32,7 @@ import {
     userService, 
     inventoryService,
     tableService,
+    tenantService,
     getErrorMessage 
 } from '../../api/service';
 
@@ -46,6 +47,7 @@ import {
 } from '../../lib/analytics';
 import { downloadCSV } from '../../lib/exportCsv';
 import toast from 'react-hot-toast';
+import { formatCurrency } from '../../lib/formatCurrency';
 
 // UI
 import Skeleton from '../../components/ui/Skeleton';
@@ -93,6 +95,12 @@ const RevenuePanel: React.FC<PanelProps> = ({ dateRange }) => {
         queryFn: () => paymentService.getAll() // Ideally we'd pass filters to API, but using client aggregation as requested
     });
 
+    const { data: settings } = useQuery({
+        queryKey: ['tenant-settings'],
+        queryFn: () => tenantService.getSettings(),
+    });
+    const currency = settings?.currency || 'KES';
+
     const stats = useMemo(() => payments?.data ? deriveRevenue(payments.data, dateRange) : null, [payments, dateRange]);
 
     if (isLoading) return <Skeleton className="h-[400px] w-full rounded-3xl" />;
@@ -111,7 +119,7 @@ const RevenuePanel: React.FC<PanelProps> = ({ dateRange }) => {
                     Revenue Overview
                 </h3>
                 <div className="flex items-center gap-2">
-                   <span className="label-sm bg-secondary/10 text-secondary px-3 py-1 rounded-full font-bold">TOTAL: KES {stats?.totalRevenue.toLocaleString()}</span>
+                   <span className="label-sm bg-secondary/10 text-secondary px-3 py-1 rounded-full font-bold">TOTAL: {formatCurrency(stats?.totalRevenue || 0, currency)}</span>
                 </div>
             </div>
 
@@ -183,6 +191,13 @@ const OccupancyPanel: React.FC<PanelProps> = ({ dateRange }) => {
 
 const MenuPanel: React.FC<PanelProps> = ({ dateRange }) => {
     const { data: orders, isLoading } = useQuery({ queryKey: ['executive-orders-menu', dateRange], queryFn: () => orderService.getAll() });
+    
+    const { data: settings } = useQuery({
+        queryKey: ['tenant-settings'],
+        queryFn: () => tenantService.getSettings(),
+    });
+    const currency = settings?.currency || 'KES';
+
     const stats = useMemo(() => orders?.data ? deriveMenuPerformance(orders.data, dateRange) : null, [orders, dateRange]);
 
     if (isLoading) return <Skeleton className="h-[400px] w-full rounded-3xl" />;
@@ -204,7 +219,7 @@ const MenuPanel: React.FC<PanelProps> = ({ dateRange }) => {
                                     <span className="text-xs font-bold text-on-surface-variant w-4">{i+1}</span>
                                     <span className="body-md font-semibold text-on-surface group-hover:text-secondary transition-colors">{item.name}</span>
                                 </div>
-                                <span className="body-md font-bold">KES {item.revenue.toLocaleString()}</span>
+                                <span className="body-md font-bold">{formatCurrency(item.revenue, currency)}</span>
                             </div>
                         ))}
                     </div>
@@ -229,6 +244,12 @@ const LaborPanel: React.FC<PanelProps> = ({ dateRange }) => {
     const { data: shifts, isLoading: sLoading } = useQuery({ queryKey: ['executive-shifts', dateRange], queryFn: () => shiftService.getAll() });
     const { data: users, isLoading: uLoading } = useQuery({ queryKey: ['executive-users'], queryFn: () => userService.getAll() });
 
+    const { data: settings } = useQuery({
+        queryKey: ['tenant-settings'],
+        queryFn: () => tenantService.getSettings(),
+    });
+    const currency = settings?.currency || 'KES';
+
     const stats = useMemo(() => (shifts && users?.data) ? deriveLaborCost(shifts, users.data, dateRange) : null, [shifts, users, dateRange]);
 
     if (sLoading || uLoading) return <Skeleton className="h-[250px] w-full rounded-3xl" />;
@@ -242,7 +263,7 @@ const LaborPanel: React.FC<PanelProps> = ({ dateRange }) => {
                 </h3>
                 <div className="text-right">
                     <p className="label-sm text-on-surface-variant uppercase font-bold">Total Cost</p>
-                    <p className="headline-md font-bold text-on-surface">KES {stats?.totalCost.toLocaleString()}</p>
+                    <p className="headline-md font-bold text-on-surface">{formatCurrency(stats?.totalCost || 0, currency)}</p>
                 </div>
             </div>
 
@@ -260,6 +281,13 @@ const LaborPanel: React.FC<PanelProps> = ({ dateRange }) => {
 
 const InventoryPanel: React.FC<PanelProps> = ({ dateRange }) => {
     const { data: inventory, isLoading } = useQuery({ queryKey: ['executive-inventory'], queryFn: () => inventoryService.getAll() });
+    
+    const { data: settings } = useQuery({
+        queryKey: ['tenant-settings'],
+        queryFn: () => tenantService.getSettings(),
+    });
+    const currency = settings?.currency || 'KES';
+
     const stats = useMemo(() => inventory?.data ? deriveInventoryStats(inventory.data) : null, [inventory]);
 
     if (isLoading) return <Skeleton className="h-[250px] w-full rounded-3xl" />;
@@ -274,7 +302,7 @@ const InventoryPanel: React.FC<PanelProps> = ({ dateRange }) => {
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-6">
                 <div className="space-y-1">
                     <p className="label-sm text-on-surface-variant uppercase font-bold">Stock Valuation</p>
-                    <p className="headline-md font-bold">KES {stats?.totalValue.toLocaleString()}</p>
+                    <p className="headline-md font-bold">{formatCurrency(stats?.totalValue || 0, currency)}</p>
                 </div>
                 <div className="space-y-1">
                     <p className="label-sm text-on-surface-variant uppercase font-bold">Stock-out Risk</p>

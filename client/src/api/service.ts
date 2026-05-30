@@ -230,6 +230,9 @@ export const tableService = {
     settle: (id: string) => api.post<Table>(`/api/tables/${id}/settle`).then(r => r.data),
     transfer: (id: string, targetTableId: string) => api.post<Table>(`/api/tables/${id}/transfer`, { targetTableId }).then(r => r.data),
     merge: (id: string, targetTableId: string) => api.post<Table>(`/api/tables/${id}/merge`, { targetTableId }).then(r => r.data),
+    // FIX-004 (DEEP-CRIT-004): Transactional table settlement
+    settleOrders: (id: string, payload: { orderIds: string[]; method: 'CASH' | 'CARD' }) =>
+        api.post<{ settledOrders: number; payments: Payment[] }>(`/api/tables/${id}/settle-orders`, payload).then(r => r.data),
 };
 
 export const reservationService = {
@@ -339,7 +342,7 @@ export const guestFolioService = {
         return { orders: ordersRes.data.data, payments: paymentsRes.data.data };
     },
     getCheckedInGuests: (filters?: ReservationFilters) => 
-        api.get<PaginatedResponse<Reservation>>('/api/reservations', { params: { status: 'checked-in', ...filters } }).then(r => r.data),
+        api.get<PaginatedResponse<Reservation>>('/api/reservations', { params: { status: 'SEATED', ...filters } }).then(r => r.data),
     getGuestById: (reservationId: string) => 
         api.get<Reservation>(`/api/reservations/${reservationId}`).then(r => r.data),
     checkoutFolio: (roomId: string, payload: FolioCheckoutPayload) => 

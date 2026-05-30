@@ -40,6 +40,7 @@ model Vendor {
   contactName    String?
   email          String?
   phone          String?
+  address        String?
   categories     String[]
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt

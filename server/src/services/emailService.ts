@@ -1,8 +1,16 @@
 import { Resend } from 'resend';
 import { logger } from '../lib/logger';
 
-// Use the API key from SMTP_PASS (or RESEND_API_KEY if you set it later)
-const resend = new Resend(process.env.SMTP_PASS || process.env.RESEND_API_KEY);
+// Use the API key from SMTP_PASS (or RESEND_API_KEY if you set it later).
+// In tests, avoid constructing the Resend client when no API key is configured.
+const resendApiKey = process.env.SMTP_PASS || process.env.RESEND_API_KEY;
+const resend = resendApiKey
+  ? new Resend(resendApiKey)
+  : {
+      emails: {
+        send: async () => ({ error: null }),
+      },
+    };
 
 export async function sendApplicationReceived(data: {
   to: string;

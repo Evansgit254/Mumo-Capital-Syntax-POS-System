@@ -16,11 +16,11 @@ export default function GuestDirectoryPage() {
     const navigate = useNavigate();
     const [searchTerm, setSearchTerm] = useState('');
     const [floorFilter, setFloorFilter] = useState('ALL');
-    const [statusFilter, setStatusFilter] = useState('CHECKED_IN');
+    const [statusFilter, setStatusFilter] = useState('SEATED');
 
     // Fetch guests
     const { data: paginatedGuests, isLoading } = useQuery({
-        queryKey: ['checked-in-guests', statusFilter],
+        queryKey: ['seated-guests', statusFilter],
         queryFn: () => guestFolioService.getCheckedInGuests({ status: statusFilter }),
     });
 
@@ -69,7 +69,7 @@ export default function GuestDirectoryPage() {
                         value={statusFilter}
                         onChange={(e) => setStatusFilter(e.target.value)}
                     >
-                        <option value="CHECKED_IN">Checked-In</option>
+                        <option value="SEATED">Seated / In-House</option>
                         <option value="EXPECTED">Expected</option>
                         <option value="CHECKED_OUT">Checked-Out</option>
                     </select>
@@ -97,7 +97,7 @@ export default function GuestDirectoryPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         <div className="col-span-full mb-2">
                             <p className="body-md text-on-surface-variant">
-                                Displaying {filteredGuests.length} checked-in guests
+                                Displaying {filteredGuests.length} active guests
                             </p>
                         </div>
                         {filteredGuests.map(guest => (

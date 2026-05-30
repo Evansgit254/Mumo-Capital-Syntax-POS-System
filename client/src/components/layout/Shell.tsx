@@ -51,13 +51,14 @@ const NAV_ITEMS = [
     { name: 'Help', path: '/help', icon: HelpCircle },
     { name: 'Permissions', path: '/admin/permissions', icon: Shield, roles: ['TENANT_ADMIN'], separator: true },
     { name: 'Tenant', path: '/admin/tenant', icon: Building2, roles: ['TENANT_ADMIN'] },
-    { name: 'Floor Plan', path: '/admin/tables', icon: Layout, roles: ['TENANT_ADMIN', 'MANAGER'] },
+    { name: 'Floor Plan', path: '/admin/tables', icon: Layout, roles: ['TENANT_ADMIN'] },
     { name: 'Executive Insights', path: '/admin/analytics', icon: LayoutPanelLeft, roles: ['TENANT_ADMIN'] },
 ];
 
 export default function Shell() {
-    const { session, ui } = useStore();
-    const { setSidebarOpen } = ui;
+    const session = useStore((state) => state.session);
+    const sidebarOpen = useStore((state) => state.ui.sidebarOpen);
+    const setSidebarOpen = useStore((state) => state.ui.setSidebarOpen);
     const navigate = useNavigate();
 
     // DEEP-WARN-014: Use comprehensive logout() instead of just clearSession()
@@ -66,7 +67,6 @@ export default function Shell() {
         navigate('/login');
     };
 
-    const sidebarOpen = ui.sidebarOpen;
 
     return (
         <div className="flex h-screen bg-surface overflow-hidden">
@@ -83,7 +83,7 @@ export default function Shell() {
                         <span className="text-xl font-bold text-white">M</span>
                     </div>
                     {sidebarOpen && (
-                        <div className="flex flex-col overflow-hidden">
+                        <div className="flex flex-col overflow-hidden animate-fade-in">
                             <span className="text-sm font-bold text-on-surface truncate">
                                 {session.tenantName || 'Mumo POS'}
                             </span>
@@ -96,50 +96,63 @@ export default function Shell() {
 
                 <button 
                     onClick={() => setSidebarOpen(!sidebarOpen)}
-                    className="hidden tablet:flex absolute top-6 -right-4 h-8 w-8 bg-surface-container-high border border-outline-variant rounded-full items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors z-50 shadow-lg"
+                    className="hidden tablet:flex absolute top-6 -right-5 h-10 w-10 bg-secondary text-on-secondary rounded-full items-center justify-center transition-all hover:scale-110 active:scale-95 z-50 shadow-xl border-4 border-surface"
                 >
-                    <ChevronRight className={cn("transition-transform", sidebarOpen && "rotate-180")} size={16} />
+                    <ChevronRight className={cn("transition-transform duration-500", sidebarOpen && "rotate-180")} size={24} />
                 </button>
 
                 {/* Nav */}
-                <nav className="flex-1 py-6 px-3 space-y-1 overflow-y-auto">
+                <nav className={cn(
+                    "flex-1 py-6 px-3 space-y-1",
+                    sidebarOpen ? "overflow-y-auto" : "overflow-visible"
+                )}>
                     {NAV_ITEMS.map((item) => {
                         // Role guard for nav items
                         if (item.roles && !item.roles.includes(session.role as string)) return null;
                         
                         return (
-                            <div key={item.path}>
+                            <div key={item.path} className="relative group">
                                 {(item as any).separator && (
                                     <div className="my-3 mx-2 border-t border-outline-variant/50" />
                                 )}
                                 <NavLink
                                     to={item.path}
                                     className={({ isActive }) => cn(
-                                        "flex items-center h-[56px] rounded-xl transition-all group relative",
+                                        "flex items-center h-[56px] rounded-xl transition-all relative overflow-hidden",
                                         sidebarOpen ? "gap-4 px-4" : "justify-center px-0 mx-2",
                                         isActive 
-                                            ? "bg-secondary/10 text-secondary" 
+                                            ? "bg-secondary text-on-secondary shadow-lg shadow-secondary/20" 
                                             : "text-on-surface-variant hover:bg-white/5 hover:text-on-surface"
                                     )}
                                 >
                                     {({ isActive }) => (
                                         <>
-                                            <item.icon size={24} className="shrink-0" />
-                                            {sidebarOpen && <span className="font-medium">{item.name}</span>}
-                                            {!sidebarOpen && (
-                                                <div className="absolute left-full ml-2 px-2 py-1 bg-surface-container-highest text-white text-xs rounded opacity-0 pointer-events-none group-hover:opacity-100 transition-opacity whitespace-nowrap z-50">
+                                            <item.icon size={24} className={cn("shrink-0 transition-transform", isActive && "scale-110")} />
+                                            {sidebarOpen && (
+                                                <span className="font-semibold whitespace-nowrap animate-fade-in">
                                                     {item.name}
-                                                </div>
+                                                </span>
                                             )}
+                                            
                                             {isActive && (
                                                 <div className={cn(
-                                                    "absolute left-0 top-1/4 bottom-1/4 w-1 bg-secondary rounded-r-full",
-                                                    !sidebarOpen && "top-0 bottom-0"
+                                                    "absolute left-0 top-1/4 bottom-1/4 w-1 bg-white rounded-r-full",
+                                                    !sidebarOpen && "top-0 bottom-0 w-1.5"
                                                 )} />
                                             )}
                                         </>
                                     )}
                                 </NavLink>
+
+                                {/* Hover Tooltip (only when collapsed) */}
+                                {!sidebarOpen && (
+                                    <div className="fixed left-[72px] invisible group-hover:visible opacity-0 group-hover:opacity-100 translate-x-[-10px] group-hover:translate-x-0 transition-all duration-200 z-[100] pointer-events-none">
+                                        <div className="px-3 py-2 bg-surface-container-highest text-on-surface text-sm font-bold rounded-lg shadow-2xl border border-outline-variant whitespace-nowrap ml-2">
+                                            {item.name}
+                                            <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-2 bg-surface-container-highest border-l border-b border-outline-variant rotate-45" />
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         );
                     })}
@@ -155,8 +168,8 @@ export default function Shell() {
                             <User size={20} className="text-on-surface-variant" />
                         </div>
                         {sidebarOpen && (
-                            <div className="flex flex-col min-w-0">
-                                <span className="text-sm font-semibold truncate">{session.firstName}</span>
+                            <div className="flex flex-col min-w-0 animate-fade-in">
+                                <span className="text-sm font-bold truncate">{session.firstName}</span>
                                 <span className="text-xs text-on-surface-variant truncate lowercase">{session.email}</span>
                             </div>
                         )}
@@ -170,7 +183,7 @@ export default function Shell() {
                         )}
                     >
                         <LogOut size={20} className="shrink-0" />
-                        {sidebarOpen && <span className="label-sm font-bold tracking-widest">Sign Out</span>}
+                        {sidebarOpen && <span className="label-sm font-black tracking-widest animate-fade-in">Sign Out</span>}
                     </button>
                 </div>
             </aside>

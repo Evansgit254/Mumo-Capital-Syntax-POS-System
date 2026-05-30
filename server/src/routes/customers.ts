@@ -83,7 +83,7 @@ router.post(
                 data: {
                     tenantId,
                     name: req.body.name,
-                    email: req.body.email,
+                    email: req.body.email ? req.body.email.trim().toLowerCase() : undefined,
                     phone: req.body.phone,
                     totalSpend: new Prisma.Decimal(req.body.totalSpend || 0),
                 },
@@ -117,7 +117,7 @@ router.put(
                 where: { id: req.params.id },
                 data: {
                     name: req.body.name,
-                    email: req.body.email,
+                    email: req.body.email ? req.body.email.trim().toLowerCase() : undefined,
                     phone: req.body.phone,
                     loyaltyPoints: req.body.loyaltyPoints,
                     totalSpend: req.body.totalSpend !== undefined ? new Prisma.Decimal(req.body.totalSpend) : undefined,

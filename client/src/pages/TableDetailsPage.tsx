@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import { tableService, orderService } from '../api/service';
+import { tableService, orderService, tenantService } from '../api/service';
+import { formatCurrency } from '../lib/formatCurrency';
 import { useStore } from '../store/useStore';
 import { 
     Users, 
@@ -44,6 +45,12 @@ export default function TableDetailsPage() {
         queryFn: () => tableService.getOrders(id!),
         enabled: !!id,
     });
+
+    const settingsQuery = useQuery({
+        queryKey: ['tenant-settings'],
+        queryFn: tenantService.getSettings,
+    });
+    const currency = settingsQuery.data?.currency || 'KES';
 
     const handleAddOrder = () => {
         cart.setTableId(id!);
@@ -152,7 +159,7 @@ export default function TableDetailsPage() {
                                         </div>
                                         <div className="flex-1">
                                             <p className="body-md font-bold text-on-surface">{item.menuItem?.name || 'Unknown Item'}</p>
-                                            <p className="text-xs text-on-surface-variant">{Number(item.unitPrice).toLocaleString()} KES</p>
+                                            <p className="text-xs text-on-surface-variant">{formatCurrency(item.unitPrice, currency)}</p>
                                         </div>
                                         <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                             <button className="h-10 w-10 rounded-lg flex items-center justify-center text-on-surface-variant hover:bg-surface-container-highest hover:text-on-surface">
@@ -174,14 +181,14 @@ export default function TableDetailsPage() {
                                 {activeOrders.map(order => (
                                     <div key={order.id} className="flex items-center justify-between py-2 border-b border-outline-variant/30 last:border-0 text-on-surface-variant body-md">
                                         <span>Order #{order.id.slice(0, 4)}</span>
-                                        <span className="font-bold text-on-surface">{Number(order.totalAmount).toLocaleString()} KES</span>
+                                        <span className="font-bold text-on-surface">{formatCurrency(order.totalAmount, currency)}</span>
                                     </div>
                                 ))}
                                 <div className="pt-6 flex flex-col gap-6">
                                     <div className="flex items-center justify-between">
                                         <span className="headline-md text-on-surface-variant">Running Total</span>
                                         <span className="headline-md text-secondary">
-                                            {activeOrders.reduce((sum, o) => sum + Number(o.totalAmount), 0).toLocaleString()} KES
+                                            {formatCurrency(activeOrders.reduce((sum, o) => sum + Number(o.totalAmount), 0), currency)}
                                         </span>
                                     </div>
                                     <div className="flex gap-4">

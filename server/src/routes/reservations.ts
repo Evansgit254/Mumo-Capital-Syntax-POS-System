@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { prisma } from '../lib/prisma';
-import { notFound, badRequest, conflict } from '../lib/errors';
+import { notFound, badRequest, conflict, AppError } from '../lib/errors';
 import { validate } from '../middleware/validate';
 import { requireRole } from '../middleware/requireRole';
 import {
@@ -69,6 +69,64 @@ publicReservationRouter.get('/:id', async (req: Request, res: Response, next: Ne
         next(err);
     }
 });
+
+// ── Public: Self-check-in (Guest Facing) ─────────────────────────────────────
+// FIX-005 (DEEP-CRIT-005): Public guest self-check-in with atomic guards
+publicReservationRouter.post('/:id/checkin',
+    async (req: Request, res: Response, next: NextFunction) => {
+        try {
+            const tenantId = getTenantId(req);
+
+            await prisma.$transaction(async (tx) => {
+                const updated = await tx.reservation.updateMany({
+                    where: {
+                        id: req.params.id,
+                        tenantId,
+                        status: { notIn: ['CANCELLED', 'SEATED', 'COMPLETED'] },
+                    },
+                    data: { status: ReservationStatus.SEATED },
+                });
+
+                if (updated.count === 0) {
+                    throw new AppError(
+                        'Reservation cannot be checked in — already checked in or cancelled',
+                        409
+                    );
+                }
+
+                const reservation = await tx.reservation.findUnique({
+                    where: { id: req.params.id },
+                    select: { tableId: true, guestName: true },
+                });
+
+                if (reservation?.tableId) {
+                    const tableLocked = await tx.table.updateMany({
+                        where: {
+                            id: reservation.tableId,
+                            tenantId,
+                            isOccupied: false,
+                        },
+                        data: { isOccupied: true },
+                    });
+                    if (tableLocked.count === 0) {
+                        throw new AppError(
+                            'Your table is currently occupied. Please speak to staff.',
+                            409
+                        );
+                    }
+                }
+            });
+
+            // Return only safe fields — no internal IDs
+            res.json({
+                message: 'Check-in successful',
+                guestName: req.body.guestName,
+            });
+        } catch (err) {
+            next(err);
+        }
+    }
+);
 
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -306,12 +364,20 @@ staffReservationRouter.post(
                     include: { table: true },
                 });
 
-                // If the reservation has a table, mark it as occupied
+                // FIX-014 (DEEP-CRIT-014): Conditional table lock — only occupy if currently free
                 if (reservation?.tableId) {
-                    await tx.table.update({
-                        where: { id: reservation.tableId },
+                    const tableLocked = await tx.table.updateMany({
+                        where: {
+                            id: reservation.tableId,
+                            tenantId,
+                            isOccupied: false,
+                        },
                         data: { isOccupied: true },
                     });
+
+                    if (tableLocked.count === 0) {
+                        throw conflict('Table is already occupied by another party');
+                    }
                 }
 
                 return reservation;

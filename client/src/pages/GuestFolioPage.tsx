@@ -42,7 +42,7 @@ export default function GuestFolioPage() {
         mutationFn: (payload: LooseValue) => guestFolioService.checkoutFolio(roomId!, payload),
         onSuccess: () => {
             queryClient.invalidateQueries({ queryKey: ['folio', roomId] });
-            queryClient.invalidateQueries({ queryKey: ['checked-in-guests'] });
+            queryClient.invalidateQueries({ queryKey: ['seated-guests'] });
             setToastMsg('Checkout completed successfully');
             setTimeout(() => {
                 setToastMsg('');

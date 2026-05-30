@@ -92,7 +92,10 @@ function App() {
                             <Route path="/folio/:roomId" element={<GuestFolioPage />} />
                         </Route>
 
-                        <Route path="/menu" element={<MenuManagerPage />} />
+                        {/* DEEP-WARN-017: Menu restricted to MANAGER and TENANT_ADMIN */}
+                        <Route element={<ProtectedRoute allowedRoles={[Role.MANAGER, Role.TENANT_ADMIN]} />}>
+                            <Route path="/menu" element={<MenuManagerPage />} />
+                        </Route>
                         <Route path="/checkout" element={<CheckoutPage />} />
                         <Route path="/billing" element={<BillingPage />} />
                         {/* DEEP-WARN-017: Reports restricted to MANAGER and TENANT_ADMIN */}
@@ -113,11 +116,11 @@ function App() {
                         <Route path="/settings" element={<SettingsPage />} />
                         <Route path="/help" element={<HelpPage />} />
 
-                        {/* Admin Routes (DEEP-WARN-018: permissions TENANT_ADMIN only, others TENANT_ADMIN+MANAGER) */}
+                        {/* Admin Routes (FIX-009: tenant/tables/analytics restricted to TENANT_ADMIN only) */}
                         <Route element={<ProtectedRoute allowedRoles={[Role.TENANT_ADMIN]} />}>
                             <Route path="/admin/permissions" element={<PermissionsPage />} />
                         </Route>
-                        <Route element={<ProtectedRoute allowedRoles={[Role.TENANT_ADMIN, Role.MANAGER]} />}>
+                        <Route element={<ProtectedRoute allowedRoles={[Role.TENANT_ADMIN]} />}>
                             <Route path="/admin/tenant" element={<TenantPage />} />
                             <Route path="/admin/tables" element={<TableManagementPage />} />
                             <Route path="/admin/analytics" element={<Suspense fallback={<PageSkeleton />}><ExecutiveAnalyticsPage /></Suspense>} />

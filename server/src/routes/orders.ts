@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { Prisma } from '@prisma/client';
+import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { notFound, badRequest, conflict } from '../lib/errors';
 import { validate } from '../middleware/validate';
@@ -7,15 +8,32 @@ import { requireRole } from '../middleware/requireRole';
 import { createOrderSchema, updateOrderStatusSchema } from '../validators/order';
 import { Role, OrderStatus } from '@mumo/types';
 
+// FIX-006 (DEEP-CRIT-006): Zod schema for public external orders
+const externalOrderSchema = z.object({
+    tableId: z.string().min(1, 'Room number/Table ID is required'),
+    items: z.array(z.object({
+        menuItemId: z.string().min(1),
+        quantity: z.number().int().min(1),
+        notes: z.string().max(200).optional(),
+        modifiers: z.array(z.string()).optional(),
+    })).min(1, 'At least one item required'),
+});
+
 const router = Router();
 
 // ── POST /public/orders/external (Guest Facing) ─────────────────────────────
-router.post('/external', async (req: Request, res: Response, next: NextFunction) => {
+// FIX-006: Validated with Zod schema + tenant-scoped table check
+router.post('/external', validate(externalOrderSchema), async (req: Request, res: Response, next: NextFunction) => {
     try {
         const tenantId = req.headers['x-tenant-id'] as string;
-        const { tableId, items } = req.body;
+        const data = req.body;
+        const { tableId, items } = data;
 
-        if (!tableId) throw badRequest('Room number/Table ID is required');
+        // FIX-006: Verify table belongs to tenant
+        const table = await prisma.table.findFirst({
+            where: { id: tableId, tenantId },
+        });
+        if (!table) throw notFound('Table not found');
 
         // Fetch menu items to get current prices
         const menuItemIds = items.map((i: { menuItemId: string }) => i.menuItemId);
@@ -214,14 +232,17 @@ router.post(
             const { tenantId, id: userId } = req.user!;
             const { tableId, items } = req.body;
 
-            // DEEP-CRIT-005: Wrap table check + order create + table update in single transaction
+            // FIX-001 (DEEP-CRIT-001): Atomic table locking — conditional updateMany
             const order = await prisma.$transaction(async (tx) => {
-                // If table provided, lock and verify it's available
+                // If table provided, atomically lock it
                 if (tableId) {
-                    const table = await tx.table.findFirst({
+                    const locked = await tx.table.updateMany({
                         where: { id: tableId, tenantId, isOccupied: false },
+                        data: { isOccupied: true },
                     });
-                    if (!table) throw conflict('Table is not available or already occupied');
+                    if (locked.count !== 1) {
+                        throw conflict('Table is not available or already occupied');
+                    }
                 }
 
                 // Fetch menu items to get current prices — prevents price manipulation
@@ -267,13 +288,7 @@ router.post(
                     include: { items: true },
                 });
 
-                // Mark table as occupied atomically
-                if (tableId) {
-                    await tx.table.update({
-                        where: { id: tableId },
-                        data: { isOccupied: true },
-                    });
-                }
+                // FIX-001: Table already locked atomically above — no second update needed
 
                 return created;
             });
